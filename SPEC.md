@@ -10,8 +10,7 @@
 
 **Non-Goals:**
 
-1. To be used as a systems or versitile language on its own.
-2. To be a useful language outside of embeddable scripting.
+1. To be a useful language outside of embeddable scripting.
 
 ## Evaluation
 

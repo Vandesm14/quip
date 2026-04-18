@@ -35,7 +35,6 @@ Functions can be defined.
 
 ```clojure
 (defn 'add '[a b] '(print a) '(print b) '(+ 2 2))
-;; evaluates to
 (def 'add (fn '[a b] '(print a) '(print b) '(+ 2 2)))
 
 (print add)       ;; -> (Function [a b] (+ a b))

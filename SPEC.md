@@ -7,7 +7,7 @@
 
 ## Evaluation (and raw with `'`)
 
-By default, symbols will automatically evaluate to their underlying values at runtine.
+By default, symbols will automatically evaluate to their underlying values at runtime.
 
 ```clojure
 (let 'a 1) ;; "'a" is marked as a raw symbol
@@ -24,24 +24,28 @@ By default, symbols will automatically evaluate to their underlying values at ru
 (print '[a b])  ;; -> [a b]
 ```
 
+## Raw Calls (with `@`)
+
+`@` on a call makes all args raw. `@` on an arg within a raw call evaluates it. `'` within a raw call adds an extra layer of laziness.
+
+```clojure
+(def 'a 2)
+(typeof a)  ;; -> number
+(@typeof a) ;; -> symbol
+
+(@def a 2)          ;; equivalent to (def 'a 2)
+(@def a @(foo b))   ;; `a` is raw, `(foo b)` is evaluated
+(@def 'a 2)         ;; def receives the raw symbol 'a
+```
+
 ## Functions
 
-Functions are the core of Quip. They always follow this call pattern `(<symbol> <args...>)` where `<symbol>` is the name of the function to call and `<args...>` is a set of args separated by space. For example, `(+ 1 2)` will add `2` to `1`.
+Functions always follow `(<symbol> <args...>)`. For example, `(+ 1 2)` adds `2` to `1`.
 
 ### Defining Functions
 
-In Quip, `fn` is a function that takes in an array of symbols as arguments and one or more functions/values to execute, then constructs the underlying Function type from that.
-
-<!--
-Problems: Because arguments are an array of symbols, they will need to be lazy. And because the function body contains calls, we also don't want them to be evaluated, so they're lazied as well.
-
-We should add an exception to the core s-expression logic where (fn [] ..) can be wrapped within parens to call it, `((fn [a b] (+ a b)) 2 2) -> 4`. Then, one other exception, when evaluating symbols that exist at runtime in an s-expression, to evaluate and call the inner fn. For example, `(add 2 2)` might unwrap to `((fn [a b] (+ a b)) 2 2)` before being executed. This allows the entire function to be lazied instead of the args and each body expression. Plus, it provides a standard method of evaluating anonymous functions along.
-
-Problem: Functions don't contain names nor position in source as they're not constructed until they're called. Though I think this was Stack's problem as well.
--->
-
 ```clojure
-(def add '(fn [a b] (+ a b))) ;; define a function that adds two numbers
+(@def add (fn [a b] (+ a b)))
 
 (print add)       ;; -> (Function [a b] (+ a b))
 (print (add 2 2)) ;; -> 4
@@ -50,5 +54,5 @@ Problem: Functions don't contain names nor position in source as they're not con
 ### Scopes
 
 ```clojure
-(fn! '[..] ..) ;; Scopeless functions
+(@fn! [..] ..) ;; Scopeless functions
 ```

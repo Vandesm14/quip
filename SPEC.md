@@ -29,41 +29,13 @@ By default, symbols will automatically evaluate to their underlying values at ru
 (print '[a b])  ;; -> [a b]
 ```
 
-### Macro Calls
-
-`#` on a call makes all args unevaluated.
-
-```clojure
-(def 'a 2)
-(typeof a)  ;; -> number
-(#typeof a) ;; -> symbol
-(#typeof 'a) ;; -> 'symbol
-
-;; where
-(#def a 2)
-;; is the same as
-(def 'a 2)
-
-;; so then
-(#def a (+ 2 2))
-(print a) ;; -> (+ 2 2)
-
-;; and
-(def 'a (+ 2 2))
-(print a) ;; -> 4
-```
-
 ## Functions
 
 Functions can be defined.
 
 ```clojure
-;; macro call
-(#defn add [a b] (print a) (print b) (+ 2 2))
-;; or
 (defn 'add '[a b] '(print a) '(print b) '(+ 2 2))
-
-;; which both evaluate to
+;; evaluates to
 (def 'add (fn '[a b] '(print a) '(print b) '(+ 2 2)))
 
 (print add)       ;; -> (Function [a b] (+ a b))

@@ -1,9 +1,17 @@
 # Quip - Spec
 
-## Rules
+## Purpose
 
-1. Function calls: `(<symbol> <args...>)`
-2. Symbols are evaluated greedily once, on evaluation at runtime: `a -> 2, [a] -> [2], (* a a) -> 4` (except as the symbol of a function call)
+**Goals:**
+
+1. To build a language with strict and consistent rules that make it easy to implement and understand.
+2. To be deployed as a simple language, yet supporting the bootstrapping of language features in userspace,
+3. To create a platform within the language to include macros and code-as-data behaviors without special-casing macro-like behavior.
+
+**Non-Goals:**
+
+1. To be used as a systems or versitile language on its own.
+2. To be a useful language outside of embeddable scripting.
 
 ## Evaluation (and raw with `'`)
 

@@ -1,0 +1,14 @@
+(def 'a 2)
+
+(#defn add [a b] (print a) (print b) (+ 2 2))
+(defn 'add '[a b] '(print a) '(print b) '(+ 2 2))
+
+(#if (= a b) (print "true"))
+
+;; (def 'add (fn '[a b] '(print a) '(print b) '(+ 2 2)))
+
+["foo" "bar"]
+(arr "foo" "bar")
+
+{"foo" 1 "bar" 2}
+(map "foo" 1 "bar" 2)

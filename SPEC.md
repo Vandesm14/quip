@@ -32,7 +32,7 @@ By default, symbols will automatically evaluate to their underlying values at ru
 (print '[a b])  ;; -> [a b]
 ```
 
-## Raw Calls (with `@`)
+<!--## Raw Calls (with `@`)
 
 `@` on a call makes all args raw. `@` on an arg within a raw call evaluates it. `'` within a raw call adds an extra layer of laziness.
 
@@ -44,7 +44,7 @@ By default, symbols will automatically evaluate to their underlying values at ru
 (@def a 2)          ;; equivalent to (def 'a 2)
 (@def a @(foo b))   ;; `a` is raw, `(foo b)` is evaluated
 (@def 'a 2)         ;; def receives the raw symbol 'a
-```
+```-->
 
 ## Functions
 
@@ -53,14 +53,14 @@ Functions always follow `(<symbol> <args...>)`. For example, `(+ 1 2)` adds `2` 
 ### Defining Functions
 
 ```clojure
-(@def add (fn [a b] (+ a b)))
+(def 'add '(fn [a b] (+ a b)))
 
 (print add)       ;; -> (Function [a b] (+ a b))
 (print (add 2 2)) ;; -> 4
 ```
 
-### Scopes
+<!--### Scopes
 
 ```clojure
-(@fn! [..] ..) ;; Scopeless functions
-```
+(fn! [..] ..) ;; Scopeless functions
+```-->

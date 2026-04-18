@@ -13,18 +13,16 @@
 1. To be used as a systems or versitile language on its own.
 2. To be a useful language outside of embeddable scripting.
 
-## Evaluation (and raw with `'`)
+## Evaluation
 
 By default, symbols will automatically evaluate to their underlying values at runtime.
 
 ```clojure
-(let 'a 1) ;; "'a" is marked as a raw symbol
-(let 'b 2) ;; "'b" is also marked as a raw symbol
+(def 'a 1) ;; "'a" is marked as a raw symbol
+(def 'b 2) ;; "'b" is also marked as a raw symbol
 
 (print a)  ;; -> 1
 (print 'a) ;; -> a
-
-(print (add a b)) ;; -> 3
 
 (print [a b])   ;; -> [1 2]
 (print ['a b])  ;; -> [a 2]
@@ -32,28 +30,42 @@ By default, symbols will automatically evaluate to their underlying values at ru
 (print '[a b])  ;; -> [a b]
 ```
 
-<!--## Raw Calls (with `@`)
+### Macro Calls
 
-`@` on a call makes all args raw. `@` on an arg within a raw call evaluates it. `'` within a raw call adds an extra layer of laziness.
+`#` on a call makes all args unevaluated.
 
 ```clojure
 (def 'a 2)
 (typeof a)  ;; -> number
-(@typeof a) ;; -> symbol
+(#typeof a) ;; -> symbol
+(#typeof 'a) ;; -> 'symbol
 
-(@def a 2)          ;; equivalent to (def 'a 2)
-(@def a @(foo b))   ;; `a` is raw, `(foo b)` is evaluated
-(@def 'a 2)         ;; def receives the raw symbol 'a
-```-->
+;; where
+(#def a 2)
+;; is the same as
+(def 'a 2)
+
+;; so then
+(#def a (+ 2 2))
+(print a) ;; -> (+ 2 2)
+
+;; and
+(def 'a (+ 2 2))
+(print a) ;; -> 4
+```
 
 ## Functions
 
-Functions always follow `(<symbol> <args...>)`. For example, `(+ 1 2)` adds `2` to `1`.
-
-### Defining Functions
+Functions can be defined.
 
 ```clojure
-(def 'add '(fn [a b] (+ a b)))
+;; macro call
+(#defn add [a b] (print a) (print b) (+ 2 2))
+;; or
+(defn 'add '[a b] '(print a) '(print b) '(+ 2 2))
+
+;; which both evaluate to
+(def 'add (fn '[a b] '(print a) '(print b) '(+ 2 2)))
 
 (print add)       ;; -> (Function [a b] (+ a b))
 (print (add 2 2)) ;; -> 4

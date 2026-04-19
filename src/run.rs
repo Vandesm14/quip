@@ -2,7 +2,7 @@ use itertools::Itertools;
 
 use crate::{
   ast::{Expr, ExprKind},
-  context::Context,
+  context::{Context, FnParam, Function},
 };
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -26,21 +26,22 @@ impl<'a> Runtime<'a> {
             let ExprKind::List(args) = &args.kind else {
               todo!("invalid args");
             };
-            let arg_symbols = args
-              .iter()
-              .filter_map(|a| {
-                if let ExprKind::Symbol(sym) = &a.kind {
-                  Some(sym)
-                } else {
-                  None
-                }
-              })
-              .collect::<Vec<_>>();
-            if arg_symbols.len() != args.len() {
-              todo!("invalid arguments")
+
+            let mut params = Vec::new();
+            for arg in args {
+              let ExprKind::Symbol(sym) = &arg.kind else {
+                return Err("invalid argument in defn".to_string());
+              };
+              params.push(FnParam { name: sym.clone() });
             }
 
-            self.context.fns.insert(name.clone(), body.to_vec());
+            self.context.fns.insert(
+              name.clone(),
+              Function {
+                params,
+                body: body.to_vec(),
+              },
+            );
 
             Ok(Expr {
               kind: ExprKind::Nil,
@@ -57,6 +58,7 @@ impl<'a> Runtime<'a> {
             let Ok(val) = self.eval_expr(val) else {
               todo!("bad eval")
             };
+            let val = self.eval_expr(&val)?;
 
             self.context.define(name.clone(), val.clone());
 
@@ -111,9 +113,37 @@ impl<'a> Runtime<'a> {
           }
         }
 
-        _ => {
-          if let Some(_func) = self.context.fns.get(sym) {
-            todo!("custom fns");
+        name => {
+          if let Some(func) = self.context.fns.get(sym).cloned() {
+            let call_args = list.get(1..).unwrap_or(&[]);
+            if call_args.len() != func.params.len() {
+              return Err(format!(
+                "'{}' expects {} arg(s), got {}",
+                name,
+                func.params.len(),
+                call_args.len()
+              ));
+            }
+
+            let mut bound = Vec::new();
+            for (param, arg_expr) in func.params.iter().zip(call_args.iter()) {
+              let val = self.eval_expr(arg_expr)?;
+              bound.push((param.name.clone(), val));
+            }
+
+            let mut child = self.context.duplicate();
+            for (param_name, val) in bound {
+              child.define(param_name, val);
+            }
+
+            let mut child_rt = Runtime { context: child };
+            let mut result = Expr {
+              kind: ExprKind::Nil,
+            };
+            for body_expr in &func.body {
+              result = child_rt.eval_expr(body_expr)?;
+            }
+            Ok(result)
           } else {
             Err("bad fn call".to_string())
           }

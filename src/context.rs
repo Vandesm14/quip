@@ -1,23 +1,25 @@
 use core::cell::RefCell;
 use std::{borrow::Cow, collections::HashMap, rc::Rc};
 
-use crate::{
-  ast::{Expr, ExprKindVariants},
-  chain::Chain,
-};
+use crate::{ast::Expr, chain::Chain};
 
 pub type Val<'a> = Rc<RefCell<Chain<Option<Expr<'a>>>>>;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct FnParam<'a> {
+  pub name: Cow<'a, str>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Function<'a> {
-  args: Vec<ExprKindVariants>,
-  body: Vec<Expr<'a>>,
+  pub params: Vec<FnParam<'a>>,
+  pub body: Vec<Expr<'a>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Context<'a> {
   pub vars: HashMap<Cow<'a, str>, Val<'a>>,
-  pub fns: HashMap<Cow<'a, str>, Vec<Expr<'a>>>,
+  pub fns: HashMap<Cow<'a, str>, Function<'a>>,
 }
 
 impl<'a> Context<'a> {

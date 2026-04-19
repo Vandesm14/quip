@@ -4,19 +4,3 @@
 (print (x 1))
 (print (x 1))
 (print (x 1))
-
-;; (def :arr (1 2 3 4))
-
-;; (defn :for-each (:arr :each)
-;;   (def :i 0)
-;;   (def :len (len arr))
-;;   (def :each fn)
-
-;;   (if (< i len)
-;;     (each (nth arr i))
-;;     (set i (+ i 1))))
-
-;; (for-each arr (fn (:item) (print item)))
-
-;; (defn def (n v) (defn n () v))
-;; (def a 1) ;; -> (defn a () 1)

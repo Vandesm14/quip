@@ -1,6 +1,8 @@
 use core::{fmt, ops::Range};
 use std::{borrow::Cow, collections::HashMap};
 
+use crate::context::Scope;
+
 use itertools::Itertools;
 use strum::EnumDiscriminants;
 
@@ -202,6 +204,12 @@ pub enum ExprKind<'a> {
 
   List(Vec<Expr<'a>>),
   Map(HashMap<Cow<'a, str>, Expr<'a>>),
+
+  Function {
+    params: Vec<Cow<'a, str>>,
+    body: Vec<Expr<'a>>,
+    scope: Scope<'a>,
+  },
 }
 
 impl<'a> core::fmt::Display for ExprKind<'a> {
@@ -210,13 +218,21 @@ impl<'a> core::fmt::Display for ExprKind<'a> {
       ExprKind::Nil => write!(f, "nil"),
       ExprKind::String(string) => write!(f, "{}", string),
       ExprKind::Keyword(keyword) => write!(f, ":{}", keyword),
-      ExprKind::Symbol(_) => todo!(),
+      ExprKind::Symbol(symbol) => write!(f, "{}", symbol),
       ExprKind::Float(float) => write!(f, "{}", float),
       ExprKind::Integer(integer) => write!(f, "{}", integer),
       ExprKind::List(exprs) => {
         write!(f, "({})", exprs.iter().map(|e| e.to_string()).join(" "))
       }
       ExprKind::Map(_) => todo!(),
+      ExprKind::Function { params, body, .. } => {
+        write!(
+          f,
+          "(fn ({}) {})",
+          params.iter().join(" "),
+          body.iter().join(" ")
+        )
+      }
     }
   }
 }

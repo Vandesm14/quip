@@ -1,8 +1,6 @@
 use core::{fmt, ops::Range};
 use std::{borrow::Cow, collections::HashMap};
 
-use crate::context::Scope;
-
 use itertools::Itertools;
 use strum::EnumDiscriminants;
 
@@ -209,7 +207,7 @@ pub enum ExprKind<'a> {
   Function {
     params: Vec<Cow<'a, str>>,
     body: Vec<Expr<'a>>,
-    scope: Scope<'a>,
+    env: usize,
   },
 }
 

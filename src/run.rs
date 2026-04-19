@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crate::{
   ast::{Expr, ExprKind},
-  context::{Context, Scope},
+  context::Context,
 };
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -13,7 +13,7 @@ pub struct Runtime<'a> {
 impl<'a> Runtime<'a> {
   fn call(
     &mut self,
-    fn_scope: Scope<'a>,
+    closure_env: usize,
     params: Vec<Cow<'a, str>>,
     body: Vec<Expr<'a>>,
     call_args: &[Expr<'a>],
@@ -34,7 +34,7 @@ impl<'a> Runtime<'a> {
       bound.push((param.clone(), val));
     }
 
-    self.context.push_scope(fn_scope.duplicate());
+    let saved = self.context.push_scope(closure_env);
     for (param_name, val) in bound {
       self.context.define(param_name, val);
     }
@@ -46,13 +46,13 @@ impl<'a> Runtime<'a> {
       result = match self.eval_expr(body_expr) {
         Ok(v) => v,
         Err(e) => {
-          self.context.pop_scope();
+          self.context.restore_scope(saved);
           return Err(e);
         }
       };
     }
 
-    self.context.pop_scope();
+    self.context.restore_scope(saved);
     Ok(result)
   }
 
@@ -87,13 +87,9 @@ impl<'a> Runtime<'a> {
           };
           let params = Self::parse_params(param_list, "fn")?;
           let body = list.get(2..).unwrap_or(&[]).to_vec();
-          let scope = self.context.scope().clone();
+          let env = self.context.current();
           Ok(Expr {
-            kind: ExprKind::Function {
-              params,
-              body,
-              scope,
-            },
+            kind: ExprKind::Function { params, body, env },
           })
         }
 
@@ -110,13 +106,9 @@ impl<'a> Runtime<'a> {
           };
           let params = Self::parse_params(param_list, "defn")?;
           let body = list.get(3..).unwrap_or(&[]).to_vec();
-          let scope = self.context.scope().clone();
+          let env = self.context.current();
           let func = Expr {
-            kind: ExprKind::Function {
-              params,
-              body,
-              scope,
-            },
+            kind: ExprKind::Function { params, body, env },
           };
           self.context.define(name.clone(), func);
           Ok(Expr {
@@ -187,16 +179,12 @@ impl<'a> Runtime<'a> {
           // Symbol look-up.
           let val = self
             .context
-            .get_val(sym.clone())
+            .get(sym)
+            .cloned()
             .ok_or_else(|| format!("undefined '{}'", sym))?;
-          if let ExprKind::Function {
-            params,
-            body,
-            scope,
-          } = val.kind
-          {
+          if let ExprKind::Function { params, body, env } = val.kind {
             let call_args = list.get(1..).unwrap_or(&[]);
-            self.call(scope, params, body, call_args, sym.as_ref())
+            self.call(env, params, body, call_args, sym.as_ref())
           } else {
             Err(format!("'{}' is not a function", sym))
           }
@@ -208,14 +196,9 @@ impl<'a> Runtime<'a> {
         return Ok(expr.clone());
       };
       let callee = self.eval_expr(head)?;
-      if let ExprKind::Function {
-        params,
-        body,
-        scope,
-      } = callee.kind
-      {
+      if let ExprKind::Function { params, body, env } = callee.kind {
         let call_args = list.get(1..).unwrap_or(&[]);
-        self.call(scope, params, body, call_args, "<anonymous>")
+        self.call(env, params, body, call_args, "<anonymous>")
       } else {
         Ok(expr.clone())
       }
@@ -223,10 +206,173 @@ impl<'a> Runtime<'a> {
       // Get vars.
       self
         .context
-        .get_val(sym.clone())
+        .get(sym)
+        .cloned()
         .ok_or_else(|| format!("undefined '{}'", sym))
     } else {
       Ok(expr.clone())
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::ast::{lex, parse};
+
+  fn run(source: &str) -> Result<Expr<'_>, String> {
+    let tokens = lex(source);
+    let exprs = parse(source, tokens)?;
+    let mut runtime = Runtime::default();
+    let mut last = Expr {
+      kind: ExprKind::Nil,
+    };
+    for expr in &exprs {
+      last = runtime.eval_expr(expr)?;
+    }
+    Ok(last)
+  }
+
+  fn run_runtime(source: &str) -> Runtime<'_> {
+    let tokens = lex(source);
+    let exprs = parse(source, tokens).unwrap();
+    let mut runtime = Runtime::default();
+    for expr in &exprs {
+      runtime.eval_expr(expr).unwrap();
+    }
+    runtime
+  }
+
+  #[test]
+  fn top_level_scopes() {
+    let result = run("(def a 0) a").unwrap();
+    assert_eq!(result.kind, ExprKind::Integer(0));
+  }
+
+  #[test]
+  fn function_scopes_are_isolated() {
+    let source: &'static str = "((fn () (def a 0)))";
+    let runtime = run_runtime(source);
+    assert!(runtime.context.get("a").is_none());
+  }
+
+  #[test]
+  fn nested_function_scopes_are_isolated() {
+    let result = run(
+      "
+      (def a 0)
+      ((fn ()
+        (def a 1)
+        ((fn () (def a 2)))))
+      a
+    ",
+    )
+    .unwrap();
+    assert_eq!(result.kind, ExprKind::Integer(0));
+  }
+
+  #[test]
+  fn functions_can_set_to_outer() {
+    let result = run(
+      "
+      (def a 0)
+      (defn f () (set a 1))
+      (f)
+      a
+    ",
+    )
+    .unwrap();
+    assert_eq!(result.kind, ExprKind::Integer(1));
+  }
+
+  #[test]
+  fn closures_can_access_vars() {
+    let result = run(
+      "
+      (def a 0)
+      (defn outer ()
+        (def a 1)
+        (fn () a))
+      ((outer))
+    ",
+    )
+    .unwrap();
+    assert_eq!(result.kind, ExprKind::Integer(1));
+  }
+
+  #[test]
+  fn closures_can_mutate_vars() {
+    let result = run(
+      "
+      (def a 0)
+      (defn outer ()
+        (def a 1)
+        (fn () (set a 2) a))
+      ((outer))
+    ",
+    )
+    .unwrap();
+    assert_eq!(result.kind, ExprKind::Integer(2));
+  }
+
+  #[test]
+  fn closures_use_lexical_scope_not_call_site() {
+    let result = run(
+      "
+      (def a 0)
+      (defn f () a)
+      (defn shadow () (def a 1) (f))
+      (shadow)
+    ",
+    )
+    .unwrap();
+    assert_eq!(result.kind, ExprKind::Integer(0));
+  }
+
+  #[test]
+  fn calling_function_with_same_var_preserves_scope() {
+    let result = run(
+      "
+      (def a 0)
+      (defn f () a)
+      (defn caller () (def a 1) (f))
+      (caller)
+    ",
+    )
+    .unwrap();
+    assert_eq!(result.kind, ExprKind::Integer(0));
+  }
+
+  #[test]
+  fn closures_share_mutable_state_across_calls() {
+    let result = run(
+      "
+      (defn make-counter ()
+        (def n 0)
+        (fn () (set n (+ n 1)) n))
+      (def c (make-counter))
+      (c)
+      (c)
+      (c)
+    ",
+    )
+    .unwrap();
+    assert_eq!(result.kind, ExprKind::Integer(3));
+  }
+
+  #[test]
+  fn for_each_pattern_uses_lexical_scope() {
+    let result = run(
+      "
+      (defn for-test (each)
+        (def el 999)
+        (each 1))
+      (def el 0)
+      (for-test (fn (x) (set el x)))
+      el
+    ",
+    )
+    .unwrap();
+    assert_eq!(result.kind, ExprKind::Integer(1));
   }
 }

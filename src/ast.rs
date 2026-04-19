@@ -1,6 +1,8 @@
 use core::{fmt, ops::Range};
 use std::{borrow::Cow, collections::HashMap};
 
+use itertools::Itertools;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token {
   pub kind: TokenKind,
@@ -91,8 +93,8 @@ impl fmt::Display for TokenKind {
   }
 }
 
-const SYMBOL_CHARS: [char; 11] =
-  ['!', '@', '#', '$', '%', '^', '&', '*', '/', '-', '_'];
+const SYMBOL_CHARS: [char; 12] =
+  ['!', '@', '#', '$', '%', '^', '&', '*', '/', '-', '_', '+'];
 
 pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
   let source = source.as_ref();
@@ -177,8 +179,16 @@ pub struct Expr<'a> {
   pub kind: ExprKind<'a>,
 }
 
+impl<'a> core::fmt::Display for Expr<'a> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", &self.kind)
+  }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind<'a> {
+  Nil,
+
   String(String),
   Keyword(Cow<'a, str>),
   Symbol(Cow<'a, str>),
@@ -188,6 +198,23 @@ pub enum ExprKind<'a> {
 
   List(Vec<Expr<'a>>),
   Map(HashMap<Cow<'a, str>, Expr<'a>>),
+}
+
+impl<'a> core::fmt::Display for ExprKind<'a> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ExprKind::Nil => write!(f, "nil"),
+      ExprKind::String(string) => write!(f, "{}", string),
+      ExprKind::Keyword(keyword) => write!(f, ":{}", keyword),
+      ExprKind::Symbol(cow) => todo!(),
+      ExprKind::Float(float) => write!(f, "{}", float),
+      ExprKind::Integer(integer) => write!(f, "{}", integer),
+      ExprKind::List(exprs) => {
+        write!(f, "({})", exprs.iter().map(|e| e.to_string()).join(" "))
+      }
+      ExprKind::Map(hash_map) => todo!(),
+    }
+  }
 }
 
 pub fn parse<'a>(
@@ -250,9 +277,15 @@ pub fn parse<'a>(
       }
       TokenKind::Symbol => {
         if let Some(last) = stack.last_mut() {
-          last.push(Expr {
-            kind: ExprKind::Symbol(Cow::from(span)),
-          });
+          if span == "nil" {
+            last.push(Expr {
+              kind: ExprKind::Nil,
+            });
+          } else {
+            last.push(Expr {
+              kind: ExprKind::Symbol(Cow::from(span)),
+            });
+          }
         }
       }
       TokenKind::Keyword => {

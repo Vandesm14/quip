@@ -219,6 +219,39 @@ pub enum ExprKind<'a> {
   },
 }
 
+impl<'a> ExprKind<'a> {
+  /// Promotes two numeric operands to a common type. If either operand is a
+  /// [`Float`], both are returned as [`Float`]s. Non-numeric operands are
+  /// returned unchanged.
+  pub fn coerce_numeric(self, other: Self) -> (Self, Self) {
+    match (self, other) {
+      (Self::Integer(l), Self::Float(r)) => {
+        (Self::Float(l as f64), Self::Float(r))
+      }
+      (Self::Float(l), Self::Integer(r)) => {
+        (Self::Float(l), Self::Float(r as f64))
+      }
+      pair => pair,
+    }
+  }
+
+  /// Demotes a [`Float`] back to an [`Integer`] if it is a finite whole number
+  /// within the [`i64`] range. Other values are returned unchanged.
+  pub fn normalize_numeric(self) -> Self {
+    match self {
+      Self::Float(f)
+        if f.is_finite()
+          && f.fract() == 0.0
+          && f >= i64::MIN as f64
+          && f <= i64::MAX as f64 =>
+      {
+        Self::Integer(f as i64)
+      }
+      other => other,
+    }
+  }
+}
+
 impl<'a> core::fmt::Display for ExprKind<'a> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {

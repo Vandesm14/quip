@@ -210,6 +210,8 @@ pub enum ExprKind<'a> {
   Float(f64),
   Integer(i64),
 
+  Boolean(bool),
+
   List(Vec<Expr<'a>>),
   Map(HashMap<Cow<'a, str>, Expr<'a>>),
 
@@ -257,6 +259,7 @@ impl<'a> core::fmt::Display for ExprKind<'a> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       ExprKind::Nil => write!(f, "nil"),
+      ExprKind::Boolean(b) => write!(f, "{}", b),
       ExprKind::String(string) => write!(f, "{}", string),
       ExprKind::Keyword(keyword) => write!(f, ":{}", keyword),
       ExprKind::Symbol(symbol) => write!(f, "{}", symbol),
@@ -282,6 +285,8 @@ impl<'a> PartialEq for ExprKind<'a> {
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
       (Self::Nil, Self::Nil) => true,
+
+      (Self::Boolean(lhs), Self::Boolean(rhs)) => lhs == rhs,
 
       (Self::String(lhs), Self::String(rhs)) => lhs == rhs,
       (Self::Keyword(lhs), Self::Keyword(rhs)) => lhs == rhs,
@@ -317,6 +322,8 @@ impl<'a> PartialOrd for ExprKind<'a> {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
     match (self, other) {
       (Self::Nil, Self::Nil) => Some(Ordering::Equal),
+
+      (Self::Boolean(lhs), Self::Boolean(rhs)) => lhs.partial_cmp(rhs),
 
       (Self::String(lhs), Self::String(rhs)) => {
         lhs.eq(rhs).then_some(Ordering::Equal)
@@ -476,6 +483,14 @@ pub fn parse<'a>(
           if span == "nil" {
             last.push(Expr {
               kind: ExprKind::Nil,
+            });
+          } else if span == "true" {
+            last.push(Expr {
+              kind: ExprKind::Boolean(true),
+            });
+          } else if span == "false" {
+            last.push(Expr {
+              kind: ExprKind::Boolean(false),
             });
           } else {
             last.push(Expr {

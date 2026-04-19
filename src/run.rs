@@ -1,14 +1,9 @@
-use std::{borrow::Cow, collections::HashMap};
-
 use itertools::Itertools;
 
-use crate::ast::{Expr, ExprKind};
-
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct Context<'a> {
-  pub vars: HashMap<Cow<'a, str>, Expr<'a>>,
-  pub fns: HashMap<Cow<'a, str>, Vec<Expr<'a>>>,
-}
+use crate::{
+  ast::{Expr, ExprKind},
+  context::Context,
+};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Runtime<'a> {
@@ -63,7 +58,7 @@ impl<'a> Runtime<'a> {
               todo!("bad eval")
             };
 
-            self.context.vars.insert(name.clone(), val.clone());
+            self.context.define(name.clone(), val.clone());
 
             Ok(val)
           } else {
@@ -116,11 +111,17 @@ impl<'a> Runtime<'a> {
           }
         }
 
-        _ => Err("bad fn call".to_string()),
+        _ => {
+          if let Some(_func) = self.context.fns.get(sym) {
+            todo!("custom fns");
+          } else {
+            Err("bad fn call".to_string())
+          }
+        }
       }
     } else if let ExprKind::Symbol(sym) = &expr.kind {
-      if let Some(val) = self.context.vars.get(sym) {
-        Ok(val.clone())
+      if let Some(val) = self.context.get_val(sym) {
+        Ok(val)
       } else {
         todo!("invalid symbol")
       }

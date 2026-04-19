@@ -1,5 +1,7 @@
-(def a 1)
-(print a)
+(defn add (a b) (+ a b))
+
+;; (def a 1)
+(print (add 1 2))
 
 ;; (defn add (a b) (+ a b))
 

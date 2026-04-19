@@ -1,4 +1,4 @@
-use core::{fmt, ops::Range};
+use core::{cmp::Ordering, fmt, ops, ops::Range};
 use std::{borrow::Cow, collections::HashMap};
 
 use itertools::Itertools;
@@ -196,7 +196,7 @@ impl<'a> core::fmt::Display for Expr<'a> {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, Default, EnumDiscriminants)]
+#[derive(Debug, Clone, Default, EnumDiscriminants)]
 #[strum_discriminants(name(ExprKindVariants))]
 pub enum ExprKind<'a> {
   #[default]
@@ -240,6 +240,141 @@ impl<'a> core::fmt::Display for ExprKind<'a> {
           body.iter().join(" ")
         )
       }
+    }
+  }
+}
+
+impl<'a> PartialEq for ExprKind<'a> {
+  fn eq(&self, other: &Self) -> bool {
+    match (self, other) {
+      (Self::Nil, Self::Nil) => true,
+
+      (Self::String(lhs), Self::String(rhs)) => lhs == rhs,
+      (Self::Keyword(lhs), Self::Keyword(rhs)) => lhs == rhs,
+      (Self::Symbol(lhs), Self::Symbol(rhs)) => lhs == rhs,
+
+      (Self::Float(lhs), Self::Float(rhs)) => lhs == rhs,
+      (Self::Integer(lhs), Self::Integer(rhs)) => lhs == rhs,
+
+      (Self::List(lhs), Self::List(rhs)) => lhs == rhs,
+      (Self::Map(lhs), Self::Map(rhs)) => lhs == rhs,
+
+      (
+        Self::Function {
+          params: lhs_params,
+          body: lhs_body,
+          env: lhs_env,
+        },
+        Self::Function {
+          params: rhs_params,
+          body: rhs_body,
+          env: rhs_env,
+        },
+      ) => {
+        lhs_params == rhs_params && lhs_body == rhs_body && lhs_env == rhs_env
+      }
+
+      _ => false,
+    }
+  }
+}
+
+impl<'a> PartialOrd for ExprKind<'a> {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    match (self, other) {
+      (Self::Nil, Self::Nil) => Some(Ordering::Equal),
+
+      (Self::String(lhs), Self::String(rhs)) => {
+        lhs.eq(rhs).then_some(Ordering::Equal)
+      }
+      (Self::Keyword(lhs), Self::Keyword(rhs)) => {
+        lhs.eq(rhs).then_some(Ordering::Equal)
+      }
+      (Self::Symbol(lhs), Self::Symbol(rhs)) => {
+        lhs.eq(rhs).then_some(Ordering::Equal)
+      }
+
+      (Self::Float(lhs), Self::Float(rhs)) => lhs.partial_cmp(rhs),
+      (Self::Integer(lhs), Self::Integer(rhs)) => lhs.partial_cmp(rhs),
+
+      (Self::List(lhs), Self::List(rhs)) => {
+        lhs.eq(rhs).then_some(Ordering::Equal)
+      }
+
+      _ => None,
+    }
+  }
+}
+
+impl<'a> ops::Add for ExprKind<'a> {
+  type Output = Result<Self, (Self, Self)>;
+
+  fn add(self, rhs: Self) -> Self::Output {
+    match (self, rhs) {
+      (Self::Integer(lhs), Self::Integer(rhs)) => {
+        Ok(Self::Integer(lhs.saturating_add(rhs)))
+      }
+      (Self::Float(lhs), Self::Float(rhs)) => Ok(Self::Float(lhs + rhs)),
+
+      (lhs, rhs) => Err((lhs, rhs)),
+    }
+  }
+}
+
+impl<'a> ops::Sub for ExprKind<'a> {
+  type Output = Result<Self, (Self, Self)>;
+
+  fn sub(self, rhs: Self) -> Self::Output {
+    match (self, rhs) {
+      (Self::Integer(lhs), Self::Integer(rhs)) => {
+        Ok(Self::Integer(lhs.saturating_sub(rhs)))
+      }
+      (Self::Float(lhs), Self::Float(rhs)) => Ok(Self::Float(lhs - rhs)),
+
+      (lhs, rhs) => Err((lhs, rhs)),
+    }
+  }
+}
+
+impl<'a> ops::Mul for ExprKind<'a> {
+  type Output = Result<Self, (Self, Self)>;
+
+  fn mul(self, rhs: Self) -> Self::Output {
+    match (self, rhs) {
+      (Self::Integer(lhs), Self::Integer(rhs)) => {
+        Ok(Self::Integer(lhs.saturating_mul(rhs)))
+      }
+      (Self::Float(lhs), Self::Float(rhs)) => Ok(Self::Float(lhs * rhs)),
+
+      (lhs, rhs) => Err((lhs, rhs)),
+    }
+  }
+}
+
+impl<'a> ops::Div for ExprKind<'a> {
+  type Output = Result<Self, (Self, Self)>;
+
+  fn div(self, rhs: Self) -> Self::Output {
+    match (self, rhs) {
+      (Self::Integer(lhs), Self::Integer(rhs)) => {
+        Ok(Self::Integer(lhs.saturating_div(rhs)))
+      }
+      (Self::Float(lhs), Self::Float(rhs)) => Ok(Self::Float(lhs / rhs)),
+
+      (lhs, rhs) => Err((lhs, rhs)),
+    }
+  }
+}
+
+impl<'a> ops::Rem for ExprKind<'a> {
+  type Output = Result<Self, (Self, Self)>;
+
+  fn rem(self, rhs: Self) -> Self::Output {
+    match (self, rhs) {
+      (Self::Integer(lhs), Self::Integer(rhs)) => Ok(Self::Integer(lhs % rhs)),
+      (Self::Float(lhs), Self::Float(rhs)) => Ok(Self::Float(lhs % rhs)),
+
+      (lhs, rhs) => Err((lhs, rhs)),
     }
   }
 }

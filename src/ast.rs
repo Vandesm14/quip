@@ -128,6 +128,7 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
           if char == '"' {
             tokens.push(token.end(i));
             current = None;
+            continue;
           }
         }
         TokenKind::Symbol | TokenKind::Keyword => {

@@ -7,6 +7,7 @@ use crate::ast::{Expr, ExprKind};
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Context<'a> {
   pub vars: HashMap<Cow<'a, str>, Expr<'a>>,
+  pub fns: HashMap<Cow<'a, str>, Vec<Expr<'a>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -21,31 +22,53 @@ impl<'a> Runtime<'a> {
     {
       match sym.to_string().as_str() {
         "defn" => {
-          // if let Some([name, args]) = list.get(1..3)
-          //   && let Some(body) = list.get(3..)
-          // {
-          //   let ExprKind::Symbol(name) = &name.kind else {
-          //     todo!("invalid name")
-          //   };
-          //   let ExprKind::List(args) = &args.kind else {
-          //     todo!("invalid args");
-          //   };
-          //   let arg_symbols = args
-          //     .iter()
-          //     .filter_map(|a| {
-          //       if let ExprKind::Symbol(sym) = &a.kind {
-          //         Some(sym)
-          //       } else {
-          //         None
-          //       }
-          //     })
-          //     .collect::<Vec<_>>();
-          //   if arg_symbols.len() != args.len() {
-          //     todo!("invalid arguments")
-          //   }
-          // }
+          if let Some([name, args]) = list.get(1..3)
+            && let Some(body) = list.get(3..)
+          {
+            let ExprKind::Symbol(name) = &name.kind else {
+              todo!("invalid name")
+            };
+            let ExprKind::List(args) = &args.kind else {
+              todo!("invalid args");
+            };
+            let arg_symbols = args
+              .iter()
+              .filter_map(|a| {
+                if let ExprKind::Symbol(sym) = &a.kind {
+                  Some(sym)
+                } else {
+                  None
+                }
+              })
+              .collect::<Vec<_>>();
+            if arg_symbols.len() != args.len() {
+              todo!("invalid arguments")
+            }
 
-          todo!("defn")
+            self.context.fns.insert(name.clone(), body.to_vec());
+
+            Ok(Expr {
+              kind: ExprKind::Nil,
+            })
+          } else {
+            todo!("invalid defn")
+          }
+        }
+        "def" => {
+          if let Some([name, val]) = list.get(1..3) {
+            let ExprKind::Symbol(name) = &name.kind else {
+              todo!("invalid name")
+            };
+            let Ok(val) = self.eval_expr(val) else {
+              todo!("bad eval")
+            };
+
+            self.context.vars.insert(name.clone(), val.clone());
+
+            Ok(val)
+          } else {
+            todo!("invalid def")
+          }
         }
         "+" => {
           if let Some([lhs, rhs]) = list.get(1..3) {
@@ -94,6 +117,12 @@ impl<'a> Runtime<'a> {
         }
 
         _ => Err("bad fn call".to_string()),
+      }
+    } else if let ExprKind::Symbol(sym) = &expr.kind {
+      if let Some(val) = self.context.vars.get(sym) {
+        Ok(val.clone())
+      } else {
+        todo!("invalid symbol")
       }
     } else {
       Ok(expr.clone())

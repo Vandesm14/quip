@@ -2,6 +2,7 @@ use core::{fmt, ops::Range};
 use std::{borrow::Cow, collections::HashMap};
 
 use itertools::Itertools;
+use strum::EnumDiscriminants;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token {
@@ -185,8 +186,10 @@ impl<'a> core::fmt::Display for Expr<'a> {
   }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default, EnumDiscriminants)]
+#[strum_discriminants(name(ExprKindVariants))]
 pub enum ExprKind<'a> {
+  #[default]
   Nil,
 
   String(String),
@@ -206,13 +209,13 @@ impl<'a> core::fmt::Display for ExprKind<'a> {
       ExprKind::Nil => write!(f, "nil"),
       ExprKind::String(string) => write!(f, "{}", string),
       ExprKind::Keyword(keyword) => write!(f, ":{}", keyword),
-      ExprKind::Symbol(cow) => todo!(),
+      ExprKind::Symbol(_) => todo!(),
       ExprKind::Float(float) => write!(f, "{}", float),
       ExprKind::Integer(integer) => write!(f, "{}", integer),
       ExprKind::List(exprs) => {
         write!(f, "({})", exprs.iter().map(|e| e.to_string()).join(" "))
       }
-      ExprKind::Map(hash_map) => todo!(),
+      ExprKind::Map(_) => todo!(),
     }
   }
 }

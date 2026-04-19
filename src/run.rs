@@ -246,6 +246,96 @@ impl<'a> Runtime<'a> {
           }
         }
 
+        "=" => {
+          if let Some([lhs, rhs]) = list.get(1..3) {
+            let lhs = self.eval_expr(lhs)?.kind;
+            let rhs = self.eval_expr(rhs)?.kind;
+            let (lhs, rhs) = lhs.coerce_numeric(rhs);
+            Ok(Expr {
+              kind: ExprKind::Boolean(lhs == rhs),
+            })
+          } else {
+            Err("'=' requires two arguments".to_string())
+          }
+        }
+
+        "!=" => {
+          if let Some([lhs, rhs]) = list.get(1..3) {
+            let lhs = self.eval_expr(lhs)?.kind;
+            let rhs = self.eval_expr(rhs)?.kind;
+            let (lhs, rhs) = lhs.coerce_numeric(rhs);
+            Ok(Expr {
+              kind: ExprKind::Boolean(lhs != rhs),
+            })
+          } else {
+            Err("'!=' requires two arguments".to_string())
+          }
+        }
+
+        "<" => {
+          if let Some([lhs, rhs]) = list.get(1..3) {
+            let lhs = self.eval_expr(lhs)?.kind;
+            let rhs = self.eval_expr(rhs)?.kind;
+            let (lhs, rhs) = lhs.coerce_numeric(rhs);
+            match lhs.partial_cmp(&rhs) {
+              Some(ord) => Ok(Expr {
+                kind: ExprKind::Boolean(ord.is_lt()),
+              }),
+              None => Err("'<' requires comparable arguments".to_string()),
+            }
+          } else {
+            Err("'<' requires two arguments".to_string())
+          }
+        }
+
+        "<=" => {
+          if let Some([lhs, rhs]) = list.get(1..3) {
+            let lhs = self.eval_expr(lhs)?.kind;
+            let rhs = self.eval_expr(rhs)?.kind;
+            let (lhs, rhs) = lhs.coerce_numeric(rhs);
+            match lhs.partial_cmp(&rhs) {
+              Some(ord) => Ok(Expr {
+                kind: ExprKind::Boolean(ord.is_le()),
+              }),
+              None => Err("'<=' requires comparable arguments".to_string()),
+            }
+          } else {
+            Err("'<=' requires two arguments".to_string())
+          }
+        }
+
+        ">" => {
+          if let Some([lhs, rhs]) = list.get(1..3) {
+            let lhs = self.eval_expr(lhs)?.kind;
+            let rhs = self.eval_expr(rhs)?.kind;
+            let (lhs, rhs) = lhs.coerce_numeric(rhs);
+            match lhs.partial_cmp(&rhs) {
+              Some(ord) => Ok(Expr {
+                kind: ExprKind::Boolean(ord.is_gt()),
+              }),
+              None => Err("'>' requires comparable arguments".to_string()),
+            }
+          } else {
+            Err("'>' requires two arguments".to_string())
+          }
+        }
+
+        ">=" => {
+          if let Some([lhs, rhs]) = list.get(1..3) {
+            let lhs = self.eval_expr(lhs)?.kind;
+            let rhs = self.eval_expr(rhs)?.kind;
+            let (lhs, rhs) = lhs.coerce_numeric(rhs);
+            match lhs.partial_cmp(&rhs) {
+              Some(ord) => Ok(Expr {
+                kind: ExprKind::Boolean(ord.is_ge()),
+              }),
+              None => Err("'>=' requires comparable arguments".to_string()),
+            }
+          } else {
+            Err("'>=' requires two arguments".to_string())
+          }
+        }
+
         "print" => {
           if let Some(args) = list.get(1..) {
             let parts = args
@@ -579,6 +669,218 @@ mod tests {
         fn modulo_negative_dividend() {
           let result = run("(% -10 3)").unwrap();
           assert_eq!(result.kind, ExprKind::Integer(-1));
+        }
+      }
+    }
+
+    mod comparison {
+      use super::*;
+
+      mod equality {
+        use super::*;
+
+        #[test]
+        fn equal_integers() {
+          assert_eq!(run("(= 1 1)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn unequal_integers() {
+          assert_eq!(run("(= 1 2)").unwrap().kind, ExprKind::Boolean(false));
+        }
+
+        #[test]
+        fn equal_after_numeric_coercion() {
+          assert_eq!(run("(= 1 1.0)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn equal_floats() {
+          assert_eq!(run("(= 1.5 1.5)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn equal_strings() {
+          assert_eq!(
+            run("(= \"hello\" \"hello\")").unwrap().kind,
+            ExprKind::Boolean(true)
+          );
+        }
+
+        #[test]
+        fn unequal_strings() {
+          assert_eq!(
+            run("(= \"hello\" \"world\")").unwrap().kind,
+            ExprKind::Boolean(false)
+          );
+        }
+
+        #[test]
+        fn equal_nil() {
+          assert_eq!(run("(= nil nil)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn equal_booleans() {
+          assert_eq!(
+            run("(= true true)").unwrap().kind,
+            ExprKind::Boolean(true)
+          );
+          assert_eq!(
+            run("(= false false)").unwrap().kind,
+            ExprKind::Boolean(true)
+          );
+        }
+
+        #[test]
+        fn unequal_booleans() {
+          assert_eq!(
+            run("(= true false)").unwrap().kind,
+            ExprKind::Boolean(false)
+          );
+        }
+
+        #[test]
+        fn different_types_are_not_equal() {
+          assert_eq!(run("(= 1 \"1\")").unwrap().kind, ExprKind::Boolean(false));
+        }
+
+        #[test]
+        fn missing_argument_is_an_error() {
+          assert!(run("(= 1)").is_err());
+        }
+      }
+
+      mod inequality {
+        use super::*;
+
+        #[test]
+        fn equal_values_are_not_unequal() {
+          assert_eq!(run("(!= 1 1)").unwrap().kind, ExprKind::Boolean(false));
+        }
+
+        #[test]
+        fn unequal_values_are_unequal() {
+          assert_eq!(run("(!= 1 2)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn coerced_equal_values_are_not_unequal() {
+          assert_eq!(run("(!= 1 1.0)").unwrap().kind, ExprKind::Boolean(false));
+        }
+
+        #[test]
+        fn different_types_are_unequal() {
+          assert_eq!(
+            run("(!= 1 \"1\")").unwrap().kind,
+            ExprKind::Boolean(true)
+          );
+        }
+      }
+
+      mod less_than {
+        use super::*;
+
+        #[test]
+        fn integer_less_than() {
+          assert_eq!(run("(< 1 2)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn integer_not_less_than_equal() {
+          assert_eq!(run("(< 1 1)").unwrap().kind, ExprKind::Boolean(false));
+        }
+
+        #[test]
+        fn integer_not_less_than_greater() {
+          assert_eq!(run("(< 2 1)").unwrap().kind, ExprKind::Boolean(false));
+        }
+
+        #[test]
+        fn float_less_than() {
+          assert_eq!(run("(< 1.5 2.5)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn mixed_numeric_less_than() {
+          assert_eq!(run("(< 1 2.0)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn incomparable_types_are_an_error() {
+          assert!(run("(< \"a\" \"b\")").is_err());
+        }
+      }
+
+      mod less_than_or_equal {
+        use super::*;
+
+        #[test]
+        fn integer_less_than_or_equal_less() {
+          assert_eq!(run("(<= 1 2)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn integer_less_than_or_equal_equal() {
+          assert_eq!(run("(<= 1 1)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn integer_not_less_than_or_equal_greater() {
+          assert_eq!(run("(<= 2 1)").unwrap().kind, ExprKind::Boolean(false));
+        }
+
+        #[test]
+        fn mixed_numeric_less_than_or_equal() {
+          assert_eq!(run("(<= 1 1.0)").unwrap().kind, ExprKind::Boolean(true));
+        }
+      }
+
+      mod greater_than {
+        use super::*;
+
+        #[test]
+        fn integer_greater_than() {
+          assert_eq!(run("(> 2 1)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn integer_not_greater_than_equal() {
+          assert_eq!(run("(> 1 1)").unwrap().kind, ExprKind::Boolean(false));
+        }
+
+        #[test]
+        fn integer_not_greater_than_less() {
+          assert_eq!(run("(> 1 2)").unwrap().kind, ExprKind::Boolean(false));
+        }
+
+        #[test]
+        fn mixed_numeric_greater_than() {
+          assert_eq!(run("(> 2.0 1)").unwrap().kind, ExprKind::Boolean(true));
+        }
+      }
+
+      mod greater_than_or_equal {
+        use super::*;
+
+        #[test]
+        fn integer_greater_than_or_equal_greater() {
+          assert_eq!(run("(>= 2 1)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn integer_greater_than_or_equal_equal() {
+          assert_eq!(run("(>= 1 1)").unwrap().kind, ExprKind::Boolean(true));
+        }
+
+        #[test]
+        fn integer_not_greater_than_or_equal_less() {
+          assert_eq!(run("(>= 1 2)").unwrap().kind, ExprKind::Boolean(false));
+        }
+
+        #[test]
+        fn mixed_numeric_greater_than_or_equal() {
+          assert_eq!(run("(>= 1 1.0)").unwrap().kind, ExprKind::Boolean(true));
         }
       }
     }

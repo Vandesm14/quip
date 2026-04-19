@@ -1,3 +1,7 @@
+use quip::lexer::lex;
+
 fn main() {
-  println!("Hello, world!");
+  let source = include_str!("../example.quip");
+
+  println!("{:#?}", lex(source));
 }

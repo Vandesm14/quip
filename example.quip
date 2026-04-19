@@ -1,17 +1,17 @@
-(def 'a 2)
 
-(print now) ;; -> (get-time)
 
-(def 'now (get-time))
-(print now) ;; -> <the current time>
+;; (def :arr (1 2 3 4))
 
-(defn 'add '[a b] '(print a) '(print b) '(+ 2 2))
-(def 'add (fn '[a b] '(print a) '(print b) '(+ 2 2)))
+;; (defn :for-each (:arr :each)
+;;   (def :i 0)
+;;   (def :len (len arr))
+;;   (def :each fn)
 
-(if '(= a b) '(print "true"))
+;;   (if (< i len)
+;;     (each (nth arr i))
+;;     (set i (+ i 1))))
 
-["foo" "bar"]
-(arr "foo" "bar")
+;; (for-each arr (fn (:item) (print item)))
 
-{"foo" 1 "bar" 2}
-(map "foo" 1 "bar" 2)
+;; (defn def (n v) (defn n () v))
+;; (def a 1) ;; -> (defn a () 1)

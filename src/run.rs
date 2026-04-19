@@ -67,6 +67,19 @@ impl<'a> Runtime<'a> {
             todo!("invalid def")
           }
         }
+        "set" => {
+          if let Some([name, val]) = list.get(1..3) {
+            let ExprKind::Symbol(name) = &name.kind else {
+              return Err("invalid name in set".to_string());
+            };
+            let val = self.eval_expr(val)?;
+            self.context.set(name.clone(), val.clone())?;
+            Ok(val)
+          } else {
+            Err("invalid set".to_string())
+          }
+        }
+
         "+" => {
           if let Some([lhs, rhs]) = list.get(1..3) {
             let Ok(lhs) = self.eval_expr(lhs).map(|expr| expr.kind) else {

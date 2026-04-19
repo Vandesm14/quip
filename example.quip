@@ -1,9 +1,9 @@
-(defn add (a b) (+ a b))
+(def val 0)
 
-;; (def a 1)
-(print (add 1 2))
-
-;; (defn add (a b) (+ a b))
+(defn inc (a) (set val (+ val a)))
+(print (inc 1))
+(print (inc 1))
+(print (inc 1))
 
 ;; (def :arr (1 2 3 4))
 

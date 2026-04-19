@@ -131,7 +131,7 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
           }
         }
         TokenKind::Symbol | TokenKind::Keyword => {
-          if !(char.is_alphabetic() || SYMBOL_CHARS.contains(&char)) {
+          if !(char.is_ascii_alphanumeric() || SYMBOL_CHARS.contains(&char)) {
             tokens.push(token.end(i));
             current = None;
           }

@@ -141,6 +141,7 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
         TokenKind::RightParen => unreachable!("parens are single chars"),
       }
     } else {
+      // TODO: comments should be double ":"?
       if char == ';' {
         current = Some(Token::begin(TokenKind::Comment, i + 1));
       } else if char == '"' {

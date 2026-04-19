@@ -245,110 +245,125 @@ mod tests {
     runtime
   }
 
-  #[test]
-  fn top_level_scopes() {
-    let result = run("(def a 0) a").unwrap();
-    assert_eq!(result.kind, ExprKind::Integer(0));
+  fn eval_source<'a>(runtime: &mut Runtime<'a>, source: &'a str) -> Expr<'a> {
+    let tokens = lex(source);
+    let exprs = parse(source, tokens).unwrap();
+    let mut last = Expr {
+      kind: ExprKind::Nil,
+    };
+    for expr in &exprs {
+      last = runtime.eval_expr(expr).unwrap();
+    }
+    last
   }
 
-  #[test]
-  fn function_scopes_are_isolated() {
-    let source: &'static str = "((fn () (def a 0)))";
-    let runtime = run_runtime(source);
-    assert!(runtime.context.get("a").is_none());
-  }
+  mod scopes {
+    use super::*;
 
-  #[test]
-  fn nested_function_scopes_are_isolated() {
-    let result = run(
-      "
+    #[test]
+    fn top_level_scopes() {
+      let result = run("(def a 0) a").unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(0));
+    }
+
+    #[test]
+    fn function_scopes_are_isolated() {
+      let source: &'static str = "((fn () (def a 0)))";
+      let runtime = run_runtime(source);
+      assert!(runtime.context.get("a").is_none());
+    }
+
+    #[test]
+    fn nested_function_scopes_are_isolated() {
+      let result = run(
+        "
       (def a 0)
       ((fn ()
         (def a 1)
         ((fn () (def a 2)))))
       a
     ",
-    )
-    .unwrap();
-    assert_eq!(result.kind, ExprKind::Integer(0));
-  }
+      )
+      .unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(0));
+    }
 
-  #[test]
-  fn functions_can_set_to_outer() {
-    let result = run(
-      "
+    #[test]
+    fn functions_can_set_to_outer() {
+      let result = run(
+        "
       (def a 0)
       (defn f () (set a 1))
       (f)
       a
     ",
-    )
-    .unwrap();
-    assert_eq!(result.kind, ExprKind::Integer(1));
-  }
+      )
+      .unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(1));
+    }
 
-  #[test]
-  fn closures_can_access_vars() {
-    let result = run(
-      "
+    #[test]
+    fn closures_can_access_vars() {
+      let result = run(
+        "
       (def a 0)
       (defn outer ()
         (def a 1)
         (fn () a))
       ((outer))
     ",
-    )
-    .unwrap();
-    assert_eq!(result.kind, ExprKind::Integer(1));
-  }
+      )
+      .unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(1));
+    }
 
-  #[test]
-  fn closures_can_mutate_vars() {
-    let result = run(
-      "
+    #[test]
+    fn closures_can_mutate_vars() {
+      let result = run(
+        "
       (def a 0)
       (defn outer ()
         (def a 1)
         (fn () (set a 2) a))
       ((outer))
     ",
-    )
-    .unwrap();
-    assert_eq!(result.kind, ExprKind::Integer(2));
-  }
+      )
+      .unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(2));
+    }
 
-  #[test]
-  fn closures_use_lexical_scope_not_call_site() {
-    let result = run(
-      "
+    #[test]
+    fn closures_use_lexical_scope_not_call_site() {
+      let result = run(
+        "
       (def a 0)
       (defn f () a)
       (defn shadow () (def a 1) (f))
       (shadow)
     ",
-    )
-    .unwrap();
-    assert_eq!(result.kind, ExprKind::Integer(0));
-  }
+      )
+      .unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(0));
+    }
 
-  #[test]
-  fn calling_function_with_same_var_preserves_scope() {
-    let result = run(
-      "
+    #[test]
+    fn calling_function_with_same_var_preserves_scope() {
+      let result = run(
+        "
       (def a 0)
       (defn f () a)
       (defn caller () (def a 1) (f))
       (caller)
     ",
-    )
-    .unwrap();
-    assert_eq!(result.kind, ExprKind::Integer(0));
-  }
+      )
+      .unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(0));
+    }
 
-  #[test]
-  fn closures_share_mutable_state_across_calls() {
-    let result = run(
-      "
+    #[test]
+    fn closures_share_mutable_state_across_calls() {
+      let result = run(
+        "
       (defn make-counter ()
         (def n 0)
         (fn () (set n (+ n 1)) n))
@@ -357,15 +372,15 @@ mod tests {
       (c)
       (c)
     ",
-    )
-    .unwrap();
-    assert_eq!(result.kind, ExprKind::Integer(3));
-  }
+      )
+      .unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(3));
+    }
 
-  #[test]
-  fn for_each_pattern_uses_lexical_scope() {
-    let result = run(
-      "
+    #[test]
+    fn for_each_pattern_uses_lexical_scope() {
+      let result = run(
+        "
       (defn for-test (each)
         (def el 999)
         (each 1))
@@ -373,8 +388,192 @@ mod tests {
       (for-test (fn (x) (set el x)))
       el
     ",
-    )
-    .unwrap();
-    assert_eq!(result.kind, ExprKind::Integer(1));
+      )
+      .unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(1));
+    }
+  }
+
+  mod garbage_collection {
+    use super::*;
+
+    #[test]
+    fn gc_should_not_trigger_below_threshold() {
+      let mut runtime: Runtime<'static> = Runtime {
+        context: Context::new(10),
+      };
+      assert!(!runtime.context.should_gc());
+
+      eval_source(&mut runtime, "((fn () nil)) ((fn () nil))");
+      assert!(!runtime.context.should_gc());
+    }
+
+    #[test]
+    fn gc_should_trigger_at_or_above_threshold() {
+      let mut runtime: Runtime<'static> = Runtime {
+        context: Context::new(3),
+      };
+      assert!(!runtime.context.should_gc());
+
+      eval_source(&mut runtime, "((fn () nil))");
+      assert!(!runtime.context.should_gc());
+
+      eval_source(&mut runtime, "((fn () nil))");
+      assert!(runtime.context.should_gc());
+
+      eval_source(&mut runtime, "((fn () nil))");
+      assert!(runtime.context.should_gc());
+    }
+
+    #[test]
+    fn gc_removes_orphaned_call_scopes() {
+      let mut runtime: Runtime<'static> = Runtime::default();
+
+      eval_source(
+        &mut runtime,
+        "((fn () nil)) ((fn () nil)) ((fn () nil)) ((fn () nil))",
+      );
+      assert_eq!(runtime.context.envs_len(), 5);
+
+      runtime.context.trigger_gc();
+      assert_eq!(runtime.context.envs_len(), 1);
+    }
+
+    #[test]
+    fn gc_removes_scope_of_overwritten_closure() {
+      let mut runtime: Runtime<'static> = Runtime::default();
+
+      eval_source(
+        &mut runtime,
+        "
+      (defn make-counter ()
+        (def n 0)
+        (fn () (set n (+ n 1)) n))
+      (def c (make-counter))
+      ",
+      );
+      let before = runtime.context.envs_len();
+      assert!(before > 1);
+
+      eval_source(&mut runtime, "(def c nil)");
+      runtime.context.trigger_gc();
+      assert!(runtime.context.envs_len() < before);
+    }
+
+    #[test]
+    fn gc_preserves_root_scope() {
+      let mut runtime: Runtime<'static> = Runtime::default();
+
+      eval_source(&mut runtime, "(def x 42) ((fn () nil)) ((fn () nil))");
+      runtime.context.trigger_gc();
+
+      let result = eval_source(&mut runtime, "x");
+      assert_eq!(result.kind, ExprKind::Integer(42));
+    }
+
+    #[test]
+    fn gc_preserves_live_closure() {
+      let mut runtime: Runtime<'static> = Runtime::default();
+
+      eval_source(
+        &mut runtime,
+        "
+      (defn make-counter ()
+        (def n 0)
+        (fn () (set n (+ n 1)) n))
+      (def c (make-counter))
+      ",
+      );
+
+      // Fill envs with unrelated call scopes that should be collectible.
+      eval_source(
+        &mut runtime,
+        "((fn () nil)) ((fn () nil)) ((fn () nil)) ((fn () nil))",
+      );
+
+      runtime.context.trigger_gc();
+
+      let r1 = eval_source(&mut runtime, "(c)");
+      assert_eq!(r1.kind, ExprKind::Integer(1));
+
+      let r2 = eval_source(&mut runtime, "(c)");
+      assert_eq!(r2.kind, ExprKind::Integer(2));
+
+      let r3 = eval_source(&mut runtime, "(c)");
+      assert_eq!(r3.kind, ExprKind::Integer(3));
+    }
+
+    #[test]
+    fn gc_preserves_closure_parent_chain() {
+      let mut runtime: Runtime<'static> = Runtime::default();
+
+      eval_source(
+        &mut runtime,
+        "
+      (defn outer ()
+        (def a 10)
+        (defn middle ()
+          (def b 20)
+          (fn () (+ a b)))
+        (middle))
+      (def f (outer))
+      ",
+      );
+
+      eval_source(&mut runtime, "((fn () nil)) ((fn () nil))");
+      runtime.context.trigger_gc();
+
+      let r = eval_source(&mut runtime, "(f)");
+      assert_eq!(r.kind, ExprKind::Integer(30));
+    }
+
+    #[test]
+    fn gc_preserves_multiple_closures_sharing_state() {
+      let mut runtime: Runtime<'static> = Runtime::default();
+
+      eval_source(
+        &mut runtime,
+        "
+      (def pair-inc nil)
+      (def pair-get nil)
+      (defn make-pair ()
+        (def n 0)
+        (set pair-inc (fn () (set n (+ n 1)) n))
+        (set pair-get (fn () n)))
+      (make-pair)
+      ",
+      );
+
+      runtime.context.trigger_gc();
+
+      eval_source(&mut runtime, "(pair-inc)");
+      eval_source(&mut runtime, "(pair-inc)");
+      let r = eval_source(&mut runtime, "(pair-get)");
+      assert_eq!(r.kind, ExprKind::Integer(2));
+    }
+
+    #[test]
+    fn gc_is_deterministic() {
+      let mut runtime: Runtime<'static> = Runtime::default();
+
+      eval_source(
+        &mut runtime,
+        "
+      (defn make-counter ()
+        (def n 0)
+        (fn () (set n (+ n 1)) n))
+      (def c (make-counter))
+      ",
+      );
+
+      runtime.context.trigger_gc();
+      let after_first = runtime.context.envs_len();
+      runtime.context.trigger_gc();
+      runtime.context.trigger_gc();
+      assert_eq!(runtime.context.envs_len(), after_first);
+
+      let r = eval_source(&mut runtime, "(c)");
+      assert_eq!(r.kind, ExprKind::Integer(1));
+    }
   }
 }

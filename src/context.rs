@@ -154,8 +154,12 @@ impl<'a> Context<'a> {
     }
   }
 
-  fn should_gc(&self) -> bool {
+  pub fn should_gc(&self) -> bool {
     self.envs.len() >= self.gc_threshold
+  }
+
+  pub fn envs_len(&self) -> usize {
+    self.envs.len()
   }
 
   pub fn do_gc_if_over(&mut self) {

@@ -150,13 +150,20 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
     }
 
     if current.is_none() {
-      // TODO: comments should be double ":"?
-      if char == ';' {
+      if char == ';' && source.chars().nth(i + 1) == Some(';') {
         current = Some(Token::begin(TokenKind::Comment, i + 1));
       } else if char == '"' {
         current = Some(Token::begin(TokenKind::String, i + 1));
-      } else if char.is_ascii_digit() || char == '-' {
+      } else if char.is_ascii_digit() {
         current = Some(Token::begin(TokenKind::Integer, i));
+      } else if char == '-' {
+        // Lookahead to determine if this is a negative number or a symbol.
+        let next_char = source.chars().nth(i + 1);
+        if matches!(next_char, Some(c) if c.is_ascii_digit()) {
+          current = Some(Token::begin(TokenKind::Integer, i));
+        } else {
+          current = Some(Token::begin(TokenKind::Symbol, i));
+        }
       } else if char == '(' {
         tokens.push(Token::new(TokenKind::LeftParen, i, i + 1));
       } else if char == ')' {

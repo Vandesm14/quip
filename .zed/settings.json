@@ -2,4 +2,9 @@
   "file_types": {
     "Clojure": ["*.quip"],
   },
+  "languages": {
+    "Clojure": {
+      "enable_language_server": false,
+    },
+  },
 }

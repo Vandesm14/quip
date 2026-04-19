@@ -294,7 +294,7 @@ impl<'a> Runtime<'a> {
         .context
         .get(sym)
         .cloned()
-        .ok_or_else(|| format!("undefined '{}'", sym))
+        .ok_or_else(|| format!("undefined fn '{}'", sym))
     } else {
       Ok(expr.clone())
     }

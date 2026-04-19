@@ -96,7 +96,8 @@ impl fmt::Display for TokenKind {
 }
 
 const SYMBOL_CHARS: &[char] = &[
-  '!', '@', '#', '$', '%', '^', '&', '*', '/', '-', '_', '+', '\'',
+  '!', '@', '#', '$', '%', '^', '&', '*', '/', '-', '_', '+', '\'', '<', '>',
+  '=',
 ];
 
 pub fn lex(source: impl AsRef<str>) -> Vec<Token> {

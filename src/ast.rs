@@ -2,6 +2,7 @@ use core::{fmt, ops::Range};
 use std::{borrow::Cow, collections::HashMap};
 
 use itertools::Itertools;
+use slotmap::DefaultKey;
 use strum::EnumDiscriminants;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -207,7 +208,7 @@ pub enum ExprKind<'a> {
   Function {
     params: Vec<Cow<'a, str>>,
     body: Vec<Expr<'a>>,
-    env: usize,
+    env: DefaultKey,
   },
 }
 

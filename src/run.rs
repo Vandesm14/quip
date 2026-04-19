@@ -1,11 +1,13 @@
 use std::borrow::Cow;
 
+use slotmap::DefaultKey;
+
 use crate::{
   ast::{Expr, ExprKind},
   context::Context,
 };
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Runtime<'a> {
   pub context: Context<'a>,
 }
@@ -13,7 +15,7 @@ pub struct Runtime<'a> {
 impl<'a> Runtime<'a> {
   fn call(
     &mut self,
-    closure_env: usize,
+    closure_env: DefaultKey,
     params: Vec<Cow<'a, str>>,
     body: Vec<Expr<'a>>,
     call_args: &[Expr<'a>],

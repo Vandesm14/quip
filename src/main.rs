@@ -11,5 +11,6 @@ fn main() {
   let mut runtime = Runtime::default();
   for expr in exprs.iter() {
     runtime.eval_expr(expr).unwrap();
+    runtime.context.do_gc_if_over();
   }
 }

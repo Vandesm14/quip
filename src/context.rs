@@ -1,6 +1,7 @@
 use std::{
   borrow::Cow,
   collections::{HashMap, HashSet},
+  panic,
 };
 
 use slotmap::{DefaultKey, SlotMap};
@@ -26,19 +27,30 @@ impl<'a> Scope<'a> {
 pub struct Context<'a> {
   envs: SlotMap<DefaultKey, Scope<'a>>,
   current: DefaultKey,
+  gc_threshold: usize,
+  root_id: DefaultKey,
 }
 
 impl<'a> Default for Context<'a> {
   fn default() -> Self {
     let mut envs = SlotMap::new();
     let current = envs.insert(Scope::new(None));
-    Self { envs, current }
+    Self {
+      envs,
+      current,
+      root_id: current,
+      // TODO: use a proper value from experimentation, instead of 500 (a guess).
+      gc_threshold: 500,
+    }
   }
 }
 
 impl<'a> Context<'a> {
-  pub fn new() -> Self {
-    Self::default()
+  pub fn new(gc_threshold: usize) -> Self {
+    Self {
+      gc_threshold,
+      ..Default::default()
+    }
   }
 
   pub fn current(&self) -> DefaultKey {
@@ -93,20 +105,62 @@ impl<'a> Context<'a> {
     self.current = saved;
   }
 
-  pub fn trigger_gc(&mut self) {
-    let mut to_remove: HashSet<DefaultKey> = HashSet::from_iter(
-      self.envs.keys().skip(1).filter(|e| *e != self.current()),
-    );
-    for env in self.envs.values() {
-      for var in env.vars.values() {
-        if let ExprKind::Function { env, .. } = var.kind {
-          to_remove.remove(&env);
-        }
+  /// Walks the parents of a scope and returns them in ascending order [self, 1st order parent, 2nd order parent, ...].
+  fn parents(&self, key: DefaultKey) -> Option<Vec<(DefaultKey, Scope<'a>)>> {
+    let mut result = Vec::new();
+    let mut idx = key;
+    loop {
+      let scope = self.envs.get(idx)?;
+      result.push((idx, scope.clone()));
+      match scope.parent {
+        Some(parent) => idx = parent,
+        None => return Some(result),
       }
     }
+  }
 
-    for key in to_remove.into_iter() {
-      self.envs.remove(key);
+  pub fn trigger_gc(&mut self) {
+    let current_keys = self
+      .parents(self.current())
+      .map(|keys| keys.iter().map(|(k, _)| *k).collect::<Vec<_>>());
+    if let Some(current_keys) = current_keys {
+      let mut to_remove: HashSet<DefaultKey> = HashSet::from_iter(
+        // Protect the root and current scopes.
+        self
+          .envs
+          .keys()
+          .filter(|k| *k != self.root_id && !current_keys.contains(k)),
+      );
+      for env in self.envs.values() {
+        for var in env.vars.values() {
+          // If a scope is referenced in a function, keep it.
+          if let ExprKind::Function { env, .. } = var.kind {
+            if let Some(parents) = self.parents(env) {
+              for (key, _) in parents {
+                to_remove.remove(&key);
+              }
+            } else {
+              panic!("failed to find parent scope");
+            }
+          }
+        }
+      }
+
+      for key in to_remove.into_iter() {
+        self.envs.remove(key);
+      }
+    } else {
+      panic!("no current scope found");
+    }
+  }
+
+  fn should_gc(&self) -> bool {
+    self.envs.len() >= self.gc_threshold
+  }
+
+  pub fn do_gc_if_over(&mut self) {
+    if self.should_gc() {
+      self.trigger_gc();
     }
   }
 }

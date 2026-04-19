@@ -1,6 +1,4 @@
-
-
-;; (def :arr (1 2 3 4))
+(def :arr (1 2 3 4))
 
 ;; (defn :for-each (:arr :each)
 ;;   (def :i 0)

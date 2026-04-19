@@ -1,4 +1,5 @@
 use core::{fmt, ops::Range};
+use std::{borrow::Cow, collections::HashMap};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token {
@@ -140,7 +141,9 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
         TokenKind::LeftParen => unreachable!("parens are single chars"),
         TokenKind::RightParen => unreachable!("parens are single chars"),
       }
-    } else {
+    }
+
+    if current.is_none() {
       // TODO: comments should be double ":"?
       if char == ';' {
         current = Some(Token::begin(TokenKind::Comment, i + 1));
@@ -167,4 +170,108 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
   }
 
   tokens
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Expr<'a> {
+  pub kind: ExprKind<'a>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExprKind<'a> {
+  String(String),
+  Keyword(Cow<'a, str>),
+  Symbol(Cow<'a, str>),
+
+  Float(f64),
+  Integer(i64),
+
+  List(Vec<Expr<'a>>),
+  Map(HashMap<Cow<'a, str>, Expr<'a>>),
+}
+
+pub fn parse<'a>(
+  source: &'a str,
+  tokens: Vec<Token>,
+) -> Result<Vec<Expr<'a>>, String> {
+  let mut stack: Vec<Vec<Expr>> = vec![Vec::new()];
+  for token in tokens.into_iter() {
+    let span = source
+      .get(token.span.to_range())
+      .ok_or_else(|| "bad span".to_string())?;
+
+    match token.kind {
+      TokenKind::Invalid => {}
+      TokenKind::Eof => {}
+
+      TokenKind::LeftParen => {
+        stack.push(Vec::new());
+      }
+      TokenKind::RightParen => {
+        let current = stack.pop();
+        if let Some(current) = current
+          && let Some(last) = stack.last_mut()
+        {
+          last.push(Expr {
+            kind: ExprKind::List(current),
+          });
+        } else {
+          return Err("unmatched '('".to_string());
+        }
+      }
+
+      TokenKind::Integer => {
+        let parsed = span
+          .parse::<i64>()
+          .map_err(|_| "invalid integer".to_string())?;
+        if let Some(last) = stack.last_mut() {
+          last.push(Expr {
+            kind: ExprKind::Integer(parsed),
+          });
+        }
+      }
+      TokenKind::Float => {
+        let parsed = span
+          .parse::<f64>()
+          .map_err(|_| "invalid float".to_string())?;
+        if let Some(last) = stack.last_mut() {
+          last.push(Expr {
+            kind: ExprKind::Float(parsed),
+          });
+        }
+      }
+
+      TokenKind::String => {
+        if let Some(last) = stack.last_mut() {
+          last.push(Expr {
+            kind: ExprKind::String(span.to_string()),
+          });
+        }
+      }
+      TokenKind::Symbol => {
+        if let Some(last) = stack.last_mut() {
+          last.push(Expr {
+            kind: ExprKind::Symbol(Cow::from(span)),
+          });
+        }
+      }
+      TokenKind::Keyword => {
+        if let Some(last) = stack.last_mut() {
+          last.push(Expr {
+            kind: ExprKind::Keyword(Cow::from(span)),
+          });
+        }
+      }
+
+      TokenKind::Comment => {}
+    }
+  }
+
+  if stack.len() > 1 {
+    Err("unmatched ')'".to_owned())
+  } else if let Some(first) = stack.first() {
+    Ok(first.clone())
+  } else {
+    Err("err, idk".to_owned())
+  }
 }

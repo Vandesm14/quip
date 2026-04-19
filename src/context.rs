@@ -61,29 +61,30 @@ impl<'a> Context<'a> {
       .or_insert_with(|| Rc::new(RefCell::new(Chain::new(None))));
   }
 
-  pub fn has(&self, name: &Cow<'a, str>) -> bool {
-    self.vars.contains_key(name)
+  pub fn has(&self, name: Cow<'a, str>) -> bool {
+    self.vars.contains_key(&name)
   }
 
-  pub fn get_val(&self, name: &Cow<'a, str>) -> Option<Expr<'a>> {
-    self.vars.get(name).and_then(|item| item.borrow().val())
+  pub fn get_val(&self, name: Cow<'a, str>) -> Option<Expr<'a>> {
+    self.vars.get(&name).and_then(|item| item.borrow().val())
   }
 
-  pub fn get_ref(&self, name: &Cow<'a, str>) -> Option<&Val<'a>> {
-    self.vars.get(name)
+  pub fn get_ref(&self, name: Cow<'a, str>) -> Option<&Val<'a>> {
+    self.vars.get(&name)
   }
 
-  pub fn remove(&mut self, name: &Cow<'a, str>) {
-    self.vars.remove(name);
+  pub fn remove(&mut self, name: Cow<'a, str>) {
+    self.vars.remove(&name);
   }
 
   /// Merges another context's vars into this one, not overwriting existing variables.
   pub fn merge(&mut self, other: Context<'a>) {
     for (name, item) in other.vars {
-      if !self.has(&name)
-        || (self.get_val(&name).is_none() && item.borrow().val().is_some())
+      if !self.has(name.clone())
+        || (self.get_val(name.clone()).is_none()
+          && item.borrow().val().is_some())
       {
-        self.vars.insert(name, item);
+        self.vars.insert(name.clone(), item);
       }
     }
   }

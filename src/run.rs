@@ -120,7 +120,7 @@ impl<'a> Runtime<'a> {
         }
       }
     } else if let ExprKind::Symbol(sym) = &expr.kind {
-      if let Some(val) = self.context.get_val(sym) {
+      if let Some(val) = self.context.get_val(sym.clone()) {
         Ok(val)
       } else {
         todo!("invalid symbol")

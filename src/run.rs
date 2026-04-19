@@ -217,7 +217,7 @@ impl<'a> Runtime<'a> {
         let call_args = list.get(1..).unwrap_or(&[]);
         self.call(scope, params, body, call_args, "<anonymous>")
       } else {
-        Err("expression is not callable".to_string())
+        Ok(expr.clone())
       }
     } else if let ExprKind::Symbol(sym) = &expr.kind {
       // Get vars.

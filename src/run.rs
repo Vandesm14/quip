@@ -336,6 +336,66 @@ impl<'a> Runtime<'a> {
           }
         }
 
+        "and" => {
+          if let Some([lhs, rhs]) = list.get(1..3) {
+            let lhs = self.eval_expr(lhs)?.kind;
+            let ExprKind::Boolean(lhs) = lhs else {
+              return Err("'and' requires boolean arguments".to_string());
+            };
+            if !lhs {
+              return Ok(Expr {
+                kind: ExprKind::Boolean(false),
+              });
+            }
+            let rhs = self.eval_expr(rhs)?.kind;
+            let ExprKind::Boolean(rhs) = rhs else {
+              return Err("'and' requires boolean arguments".to_string());
+            };
+            Ok(Expr {
+              kind: ExprKind::Boolean(rhs),
+            })
+          } else {
+            Err("'and' requires two arguments".to_string())
+          }
+        }
+
+        "or" => {
+          if let Some([lhs, rhs]) = list.get(1..3) {
+            let lhs = self.eval_expr(lhs)?.kind;
+            let ExprKind::Boolean(lhs) = lhs else {
+              return Err("'or' requires boolean arguments".to_string());
+            };
+            if lhs {
+              return Ok(Expr {
+                kind: ExprKind::Boolean(true),
+              });
+            }
+            let rhs = self.eval_expr(rhs)?.kind;
+            let ExprKind::Boolean(rhs) = rhs else {
+              return Err("'or' requires boolean arguments".to_string());
+            };
+            Ok(Expr {
+              kind: ExprKind::Boolean(rhs),
+            })
+          } else {
+            Err("'or' requires two arguments".to_string())
+          }
+        }
+
+        "not" => {
+          if let Some(operand) = list.get(1) {
+            let val = self.eval_expr(operand)?.kind;
+            let ExprKind::Boolean(b) = val else {
+              return Err("'not' requires a boolean argument".to_string());
+            };
+            Ok(Expr {
+              kind: ExprKind::Boolean(!b),
+            })
+          } else {
+            Err("'not' requires one argument".to_string())
+          }
+        }
+
         "print" => {
           if let Some(args) = list.get(1..) {
             let parts = args
@@ -742,7 +802,10 @@ mod tests {
 
         #[test]
         fn different_types_are_not_equal() {
-          assert_eq!(run("(= 1 \"1\")").unwrap().kind, ExprKind::Boolean(false));
+          assert_eq!(
+            run("(= 1 \"1\")").unwrap().kind,
+            ExprKind::Boolean(false)
+          );
         }
 
         #[test]
@@ -881,6 +944,166 @@ mod tests {
         #[test]
         fn mixed_numeric_greater_than_or_equal() {
           assert_eq!(run("(>= 1 1.0)").unwrap().kind, ExprKind::Boolean(true));
+        }
+      }
+
+      mod boolean {
+        use super::*;
+
+        mod and {
+          use super::*;
+
+          #[test]
+          fn true_and_true() {
+            assert_eq!(
+              run("(and true true)").unwrap().kind,
+              ExprKind::Boolean(true)
+            );
+          }
+
+          #[test]
+          fn true_and_false() {
+            assert_eq!(
+              run("(and true false)").unwrap().kind,
+              ExprKind::Boolean(false)
+            );
+          }
+
+          #[test]
+          fn false_and_true() {
+            assert_eq!(
+              run("(and false true)").unwrap().kind,
+              ExprKind::Boolean(false)
+            );
+          }
+
+          #[test]
+          fn false_and_false() {
+            assert_eq!(
+              run("(and false false)").unwrap().kind,
+              ExprKind::Boolean(false)
+            );
+          }
+
+          #[test]
+          fn non_boolean_lhs_is_an_error() {
+            assert!(run("(and 1 true)").is_err());
+          }
+
+          #[test]
+          fn non_boolean_rhs_is_an_error() {
+            assert!(run("(and true 1)").is_err());
+          }
+
+          #[test]
+          fn short_circuits_on_false_lhs() {
+            assert_eq!(
+              run("(and false (/ 1 0))").unwrap().kind,
+              ExprKind::Boolean(false)
+            );
+          }
+
+          #[test]
+          fn missing_argument_is_an_error() {
+            assert!(run("(and true)").is_err());
+          }
+        }
+
+        mod or {
+          use super::*;
+
+          #[test]
+          fn true_or_true() {
+            assert_eq!(
+              run("(or true true)").unwrap().kind,
+              ExprKind::Boolean(true)
+            );
+          }
+
+          #[test]
+          fn true_or_false() {
+            assert_eq!(
+              run("(or true false)").unwrap().kind,
+              ExprKind::Boolean(true)
+            );
+          }
+
+          #[test]
+          fn false_or_true() {
+            assert_eq!(
+              run("(or false true)").unwrap().kind,
+              ExprKind::Boolean(true)
+            );
+          }
+
+          #[test]
+          fn false_or_false() {
+            assert_eq!(
+              run("(or false false)").unwrap().kind,
+              ExprKind::Boolean(false)
+            );
+          }
+
+          #[test]
+          fn non_boolean_lhs_is_an_error() {
+            assert!(run("(or 1 false)").is_err());
+          }
+
+          #[test]
+          fn non_boolean_rhs_is_an_error() {
+            assert!(run("(or false 1)").is_err());
+          }
+
+          #[test]
+          fn short_circuits_on_true_lhs() {
+            assert_eq!(
+              run("(or true (/ 1 0))").unwrap().kind,
+              ExprKind::Boolean(true)
+            );
+          }
+
+          #[test]
+          fn missing_argument_is_an_error() {
+            assert!(run("(or true)").is_err());
+          }
+        }
+
+        mod not {
+          use super::*;
+
+          #[test]
+          fn not_true() {
+            assert_eq!(
+              run("(not true)").unwrap().kind,
+              ExprKind::Boolean(false)
+            );
+          }
+
+          #[test]
+          fn not_false() {
+            assert_eq!(
+              run("(not false)").unwrap().kind,
+              ExprKind::Boolean(true)
+            );
+          }
+
+          #[test]
+          fn non_boolean_argument_is_an_error() {
+            assert!(run("(not 1)").is_err());
+          }
+
+          #[test]
+          fn double_not() {
+            assert_eq!(
+              run("(not (not true))").unwrap().kind,
+              ExprKind::Boolean(true)
+            );
+          }
+
+          #[test]
+          fn missing_argument_is_an_error() {
+            assert!(run("(not)").is_err());
+          }
         }
       }
     }

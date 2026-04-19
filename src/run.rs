@@ -162,6 +162,102 @@ impl<'a> Runtime<'a> {
           }
         }
 
+        "-" => {
+          if let Some([lhs, rhs]) = list.get(1..3) {
+            let lhs = self.eval_expr(lhs)?.kind;
+            let rhs = self.eval_expr(rhs)?.kind;
+            match (lhs, rhs) {
+              (ExprKind::Integer(l), ExprKind::Integer(r)) => Ok(Expr {
+                kind: ExprKind::Integer(l - r),
+              }),
+              (ExprKind::Float(l), ExprKind::Float(r)) => Ok(Expr {
+                kind: ExprKind::Float(l - r),
+              }),
+              _ => Err("'-' requires matching numeric types".to_string()),
+            }
+          } else {
+            Err("'-' requires two arguments".to_string())
+          }
+        }
+
+        "*" => {
+          if let Some([lhs, rhs]) = list.get(1..3) {
+            let lhs = self.eval_expr(lhs)?.kind;
+            let rhs = self.eval_expr(rhs)?.kind;
+            match (lhs, rhs) {
+              (ExprKind::Integer(l), ExprKind::Integer(r)) => Ok(Expr {
+                kind: ExprKind::Integer(l * r),
+              }),
+              (ExprKind::Float(l), ExprKind::Float(r)) => Ok(Expr {
+                kind: ExprKind::Float(l * r),
+              }),
+              _ => Err("'*' requires matching numeric types".to_string()),
+            }
+          } else {
+            Err("'*' requires two arguments".to_string())
+          }
+        }
+
+        "/" => {
+          if let Some([lhs, rhs]) = list.get(1..3) {
+            let lhs = self.eval_expr(lhs)?.kind;
+            let rhs = self.eval_expr(rhs)?.kind;
+            match (lhs, rhs) {
+              (ExprKind::Integer(l), ExprKind::Integer(r)) => {
+                if r == 0 {
+                  Err("'/' division by zero".to_string())
+                } else {
+                  Ok(Expr {
+                    kind: ExprKind::Integer(l / r),
+                  })
+                }
+              }
+              (ExprKind::Float(l), ExprKind::Float(r)) => {
+                if r == 0.0 {
+                  Err("'/' division by zero".to_string())
+                } else {
+                  Ok(Expr {
+                    kind: ExprKind::Float(l / r),
+                  })
+                }
+              }
+              _ => Err("'/' requires matching numeric types".to_string()),
+            }
+          } else {
+            Err("'/' requires two arguments".to_string())
+          }
+        }
+
+        "%" => {
+          if let Some([lhs, rhs]) = list.get(1..3) {
+            let lhs = self.eval_expr(lhs)?.kind;
+            let rhs = self.eval_expr(rhs)?.kind;
+            match (lhs, rhs) {
+              (ExprKind::Integer(l), ExprKind::Integer(r)) => {
+                if r == 0 {
+                  Err("'%' modulo by zero".to_string())
+                } else {
+                  Ok(Expr {
+                    kind: ExprKind::Integer(l % r),
+                  })
+                }
+              }
+              (ExprKind::Float(l), ExprKind::Float(r)) => {
+                if r == 0.0 {
+                  Err("'%' modulo by zero".to_string())
+                } else {
+                  Ok(Expr {
+                    kind: ExprKind::Float(l % r),
+                  })
+                }
+              }
+              _ => Err("'%' requires matching numeric types".to_string()),
+            }
+          } else {
+            Err("'%' requires two arguments".to_string())
+          }
+        }
+
         "print" => {
           if let Some(args) = list.get(1..) {
             let parts = args
@@ -255,6 +351,193 @@ mod tests {
       last = runtime.eval_expr(expr).unwrap();
     }
     last
+  }
+
+  mod operations {
+    use super::*;
+    const FLOAT_THRESHOLD: f64 = 0.0001;
+
+    mod arithmetic {
+      use super::*;
+
+      mod addition {
+        use super::*;
+
+        #[test]
+        fn addition_integers() {
+          let result = run("(+ 5 3)").unwrap();
+          assert_eq!(result.kind, ExprKind::Integer(8));
+        }
+
+        #[test]
+        fn addition_floats() {
+          let result = run("(+ 5.5 2.5)").unwrap();
+          if let ExprKind::Float(f) = result.kind {
+            assert!((f - 8.0).abs() < FLOAT_THRESHOLD);
+          } else {
+            panic!("Expected float");
+          }
+        }
+
+        #[test]
+        fn addition_type_mismatch() {
+          let result = run("(+ 5 2.5)");
+          assert!(result.is_err());
+        }
+      }
+
+      mod subtraction {
+        use super::*;
+
+        #[test]
+        fn subtraction_integers() {
+          let result = run("(- 10 3)").unwrap();
+          assert_eq!(result.kind, ExprKind::Integer(7));
+        }
+
+        #[test]
+        fn subtraction_floats() {
+          let result = run("(- 10.5 3.2)").unwrap();
+          if let ExprKind::Float(f) = result.kind {
+            assert!((f - 7.3).abs() < FLOAT_THRESHOLD);
+          } else {
+            panic!("Expected float");
+          }
+        }
+
+        #[test]
+        fn subtraction_type_mismatch() {
+          let result = run("(- 10 3.2)");
+          assert!(result.is_err());
+        }
+
+        #[test]
+        fn subtraction_negative_result() {
+          let result = run("(- 3 10)").unwrap();
+          assert_eq!(result.kind, ExprKind::Integer(-7));
+        }
+      }
+
+      mod multiplication {
+        use super::*;
+
+        #[test]
+        fn multiplication_integers() {
+          let result = run("(* 5 3)").unwrap();
+          assert_eq!(result.kind, ExprKind::Integer(15));
+        }
+
+        #[test]
+        fn multiplication_floats() {
+          let result = run("(* 5.5 2.0)").unwrap();
+          if let ExprKind::Float(f) = result.kind {
+            assert!((f - 11.0).abs() < FLOAT_THRESHOLD);
+          } else {
+            panic!("Expected float");
+          }
+        }
+
+        #[test]
+        fn multiplication_by_zero() {
+          let result = run("(* 5 0)").unwrap();
+          assert_eq!(result.kind, ExprKind::Integer(0));
+        }
+
+        #[test]
+        fn multiplication_type_mismatch() {
+          let result = run("(* 5 3.5)");
+          assert!(result.is_err());
+        }
+      }
+
+      mod division {
+        use super::*;
+
+        #[test]
+        fn division_integers() {
+          let result = run("(/ 15 3)").unwrap();
+          assert_eq!(result.kind, ExprKind::Integer(5));
+        }
+
+        #[test]
+        fn division_floats() {
+          let result = run("(/ 15.0 3.0)").unwrap();
+          if let ExprKind::Float(f) = result.kind {
+            assert!((f - 5.0).abs() < FLOAT_THRESHOLD);
+          } else {
+            panic!("Expected float");
+          }
+        }
+
+        #[test]
+        fn division_by_zero_integers() {
+          let result = run("(/ 10 0)");
+          assert!(result.is_err());
+        }
+
+        #[test]
+        fn division_by_zero_floats() {
+          let result = run("(/ 10.0 0.0)");
+          assert!(result.is_err());
+        }
+
+        #[test]
+        fn division_type_mismatch() {
+          let result = run("(/ 15 3.0)");
+          assert!(result.is_err());
+        }
+
+        #[test]
+        fn division_integer_truncation() {
+          let result = run("(/ 7 2)").unwrap();
+          assert_eq!(result.kind, ExprKind::Integer(3));
+        }
+      }
+
+      mod modulo {
+        use super::*;
+
+        #[test]
+        fn modulo_integers() {
+          let result = run("(% 10 3)").unwrap();
+          assert_eq!(result.kind, ExprKind::Integer(1));
+        }
+
+        #[test]
+        fn modulo_floats() {
+          let result = run("(% 10.5 3.0)").unwrap();
+          if let ExprKind::Float(f) = result.kind {
+            assert!((f - 1.5).abs() < 0.0001);
+          } else {
+            panic!("Expected float");
+          }
+        }
+
+        #[test]
+        fn modulo_by_zero_integers() {
+          let result = run("(% 10 0)");
+          assert!(result.is_err());
+        }
+
+        #[test]
+        fn modulo_by_zero_floats() {
+          let result = run("(% 10.0 0.0)");
+          assert!(result.is_err());
+        }
+
+        #[test]
+        fn modulo_type_mismatch() {
+          let result = run("(% 10 3.0)");
+          assert!(result.is_err());
+        }
+
+        #[test]
+        fn modulo_negative_dividend() {
+          let result = run("(% -10 3)").unwrap();
+          assert_eq!(result.kind, ExprKind::Integer(-1));
+        }
+      }
+    }
   }
 
   mod scopes {

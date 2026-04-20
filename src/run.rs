@@ -616,6 +616,17 @@ impl<'a> Runtime<'a> {
           }
         }
 
+        "list" => {
+          let args = list.get(1..).unwrap_or(&[]);
+          let evaluated = args
+            .iter()
+            .map(|expr| self.eval_expr(expr))
+            .collect::<Result<Vec<_>, _>>()?;
+          Ok(Expr {
+            kind: ExprKind::List(evaluated),
+          })
+        }
+
         _ => {
           // Symbol look-up.
           let val =
@@ -1461,6 +1472,160 @@ mod tests {
       fn typeof_returns_different_types_are_not_equal() {
         let result = run("(= (typeof 42) (typeof \"42\"))").unwrap();
         assert_eq!(result.kind, ExprKind::Boolean(false));
+      }
+    }
+
+    mod list {
+      use super::*;
+
+      #[test]
+      fn list_with_no_arguments() {
+        let result = run("(list)").unwrap();
+        assert_eq!(result.kind, ExprKind::List(vec![]));
+      }
+
+      #[test]
+      fn list_with_single_integer() {
+        let result = run("(list 42)").unwrap();
+        if let ExprKind::List(items) = result.kind {
+          assert_eq!(items.len(), 1);
+          assert_eq!(items[0].kind, ExprKind::Integer(42));
+        } else {
+          panic!("Expected list");
+        }
+      }
+
+      #[test]
+      fn list_with_multiple_integers() {
+        let result = run("(list 1 2 3)").unwrap();
+        if let ExprKind::List(items) = result.kind {
+          assert_eq!(items.len(), 3);
+          assert_eq!(items[0].kind, ExprKind::Integer(1));
+          assert_eq!(items[1].kind, ExprKind::Integer(2));
+          assert_eq!(items[2].kind, ExprKind::Integer(3));
+        } else {
+          panic!("Expected list");
+        }
+      }
+
+      #[test]
+      fn list_with_mixed_types() {
+        let result = run("(list 42 \"hello\" true)").unwrap();
+        if let ExprKind::List(items) = result.kind {
+          assert_eq!(items.len(), 3);
+          assert_eq!(items[0].kind, ExprKind::Integer(42));
+          assert_eq!(items[1].kind, ExprKind::String("hello".to_string()));
+          assert_eq!(items[2].kind, ExprKind::Boolean(true));
+        } else {
+          panic!("Expected list");
+        }
+      }
+
+      #[test]
+      fn list_with_nil() {
+        let result = run("(list nil)").unwrap();
+        if let ExprKind::List(items) = result.kind {
+          assert_eq!(items.len(), 1);
+          assert_eq!(items[0].kind, ExprKind::Nil);
+        } else {
+          panic!("Expected list");
+        }
+      }
+
+      #[test]
+      fn list_evaluates_expressions() {
+        let result = run("(list (+ 1 2) (* 3 4))").unwrap();
+        if let ExprKind::List(items) = result.kind {
+          assert_eq!(items.len(), 2);
+          assert_eq!(items[0].kind, ExprKind::Integer(3));
+          assert_eq!(items[1].kind, ExprKind::Integer(12));
+        } else {
+          panic!("Expected list");
+        }
+      }
+
+      #[test]
+      fn list_with_strings() {
+        let result = run("(list \"a\" \"b\" \"c\")").unwrap();
+        if let ExprKind::List(items) = result.kind {
+          assert_eq!(items.len(), 3);
+          assert_eq!(items[0].kind, ExprKind::String("a".to_string()));
+          assert_eq!(items[1].kind, ExprKind::String("b".to_string()));
+          assert_eq!(items[2].kind, ExprKind::String("c".to_string()));
+        } else {
+          panic!("Expected list");
+        }
+      }
+
+      #[test]
+      fn list_with_floats() {
+        let result = run("(list 1.5 2.5)").unwrap();
+        if let ExprKind::List(items) = result.kind {
+          assert_eq!(items.len(), 2);
+          if let ExprKind::Float(f) = items[0].kind {
+            assert!((f - 1.5).abs() < 0.0001);
+          } else {
+            panic!("Expected float");
+          }
+          if let ExprKind::Float(f) = items[1].kind {
+            assert!((f - 2.5).abs() < 0.0001);
+          } else {
+            panic!("Expected float");
+          }
+        } else {
+          panic!("Expected list");
+        }
+      }
+
+      #[test]
+      fn list_with_variables() {
+        let result = run("(def x 10) (list x (+ x 5))").unwrap();
+        if let ExprKind::List(items) = result.kind {
+          assert_eq!(items.len(), 2);
+          assert_eq!(items[0].kind, ExprKind::Integer(10));
+          assert_eq!(items[1].kind, ExprKind::Integer(15));
+        } else {
+          panic!("Expected list");
+        }
+      }
+
+      #[test]
+      fn list_with_nested_lists() {
+        let result = run("(list (list 1 2) (list 3 4))").unwrap();
+        if let ExprKind::List(items) = result.kind {
+          assert_eq!(items.len(), 2);
+          if let ExprKind::List(inner1) = &items[0].kind {
+            assert_eq!(inner1.len(), 2);
+            assert_eq!(inner1[0].kind, ExprKind::Integer(1));
+            assert_eq!(inner1[1].kind, ExprKind::Integer(2));
+          } else {
+            panic!("Expected nested list");
+          }
+          if let ExprKind::List(inner2) = &items[1].kind {
+            assert_eq!(inner2.len(), 2);
+            assert_eq!(inner2[0].kind, ExprKind::Integer(3));
+            assert_eq!(inner2[1].kind, ExprKind::Integer(4));
+          } else {
+            panic!("Expected nested list");
+          }
+        } else {
+          panic!("Expected list");
+        }
+      }
+
+      #[test]
+      fn list_can_be_used_with_len() {
+        let result = run("(len (list 1 2 3 4))").unwrap();
+        assert_eq!(result.kind, ExprKind::Integer(4));
+      }
+
+      #[test]
+      fn list_returns_type_list() {
+        let result = run("(typeof (list 1 2 3))").unwrap();
+        assert_eq!(
+          result.kind,
+          ExprKind::String("list".to_string())
+        );
       }
     }
   }

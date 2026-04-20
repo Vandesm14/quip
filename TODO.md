@@ -1,0 +1,54 @@
+- [x] Vars
+  - [x] `defn`
+  - [x] `def`
+  - [x] `set`
+- [x] Arithmetic
+  - [x] `+`
+  - [x] `-`
+  - [x] `*`
+  - [x] `/`
+  - [x] `%`
+- [x] Comparison
+  - [x] `=`
+  - [x] `!=`
+  - [x] `<`
+  - [x] `<=`
+  - [x] `>`
+  - [x] `>=`
+- [x] Boolean Logic
+  - [x] `and`
+  - [x] `or`
+  - [x] `not`
+- [ ] List/String
+  - [ ] `len`
+  - [ ] `nth`
+  - [ ] `set-nth`
+  - [ ] `split`
+  - [ ] `concat`
+  - [ ] `push`
+  - [ ] `pop`
+- [ ] Record
+  - [ ] `insert`
+  - [ ] `get`
+  - [ ] `has`
+  - [ ] `remove`
+  - [ ] `keys`
+  - [ ] `values`
+- [ ] Type
+  - [ ] `cast`
+  - [ ] `typeof`
+  - [ ] `lazy`
+  - [x] `fn`
+  - [ ] `list`
+  - [ ] `map`
+- [ ] Control Flow
+  - [ ] `if`
+  - [ ] `exit`
+  - [ ] `call`
+- [ ] Debugging
+  - [ ] `debug`
+  - [ ] `print`
+  - [ ] `assert`
+- [ ] Special
+  - [ ] `recur`
+  - [ ] `import`

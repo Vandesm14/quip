@@ -9,3 +9,4 @@ slotmap = "1.1.1"
 strum = { version = "0.28.0", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }
 reedline = "0.38"
+thiserror = "2.0.18"

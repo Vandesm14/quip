@@ -7,6 +7,40 @@ use crate::{
   context::Context,
 };
 
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+  #[error("{0}")]
+  CallError(#[from] CallError),
+  #[error("{0}")]
+  Message(String),
+}
+
+impl From<String> for Error {
+  fn from(msg: String) -> Self {
+    Error::Message(msg)
+  }
+}
+
+#[derive(thiserror::Error, Debug)]
+#[error("call error on '{symbol}': {kind:?}")]
+pub struct CallError {
+  symbol: String,
+  kind: CallErrorKind,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum CallErrorKind {
+  #[error(
+    "incorrect arity: expected {expected} arguments, received {received} arguments"
+  )]
+  IncorrectArity { expected: usize, received: usize },
+  #[error("type mismatch: expected {expected:?}, received {received:?}")]
+  TypeMismatch {
+    expected: Vec<String>,
+    received: Vec<String>,
+  },
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Runtime<'a> {
   pub context: Context<'a>,
@@ -20,14 +54,15 @@ impl<'a> Runtime<'a> {
     body: Vec<Expr<'a>>,
     call_args: &[Expr<'a>],
     name: &str,
-  ) -> Result<Expr<'a>, String> {
+  ) -> Result<Expr<'a>, Error> {
     if call_args.len() != params.len() {
-      return Err(format!(
-        "'{}' expects {} arg(s), got {}",
-        name,
-        params.len(),
-        call_args.len()
-      ));
+      return Err(Error::CallError(CallError {
+        symbol: name.to_owned(),
+        kind: CallErrorKind::IncorrectArity {
+          expected: params.len(),
+          received: call_args.len(),
+        },
+      }));
     }
 
     let mut bound = Vec::new();
@@ -74,18 +109,19 @@ impl<'a> Runtime<'a> {
       .collect()
   }
 
-  pub fn eval_expr(&mut self, expr: &Expr<'a>) -> Result<Expr<'a>, String> {
+  pub fn eval_expr(&mut self, expr: &Expr<'a>) -> Result<Expr<'a>, Error> {
     if let ExprKind::List(list) = &expr.kind
       && let Some(ExprKind::Symbol(sym)) = list.first().map(|e| &e.kind)
     {
-      match sym.to_string().as_str() {
+      let symbol = sym.to_string();
+      match symbol.as_str() {
         "fn" => {
           // (fn (params...) body...)
           let Some(params_expr) = list.get(1) else {
-            return Err("fn: expected params list".to_string());
+            return Err(Error::Message("fn: expected params list".to_string()));
           };
           let ExprKind::List(param_list) = &params_expr.kind else {
-            return Err("fn: expected params list".to_string());
+            return Err(Error::Message("fn: expected params list".to_string()));
           };
           let params = Self::parse_params(param_list, "fn")?;
           let body = list.get(2..).unwrap_or(&[]).to_vec();
@@ -98,13 +134,17 @@ impl<'a> Runtime<'a> {
         "defn" => {
           // (defn name (params...) body...)  →  (def name (fn (params...) body...))
           let Some([name_expr, params_expr]) = list.get(1..3) else {
-            return Err("defn: expected name and params".to_string());
+            return Err(Error::Message(
+              "defn: expected name and params".to_string(),
+            ));
           };
           let ExprKind::Symbol(name) = &name_expr.kind else {
-            return Err("defn: invalid name".to_string());
+            return Err(Error::Message("defn: invalid name".to_string()));
           };
           let ExprKind::List(param_list) = &params_expr.kind else {
-            return Err("defn: expected params list".to_string());
+            return Err(Error::Message(
+              "defn: expected params list".to_string(),
+            ));
           };
           let params = Self::parse_params(param_list, "defn")?;
           let body = list.get(3..).unwrap_or(&[]).to_vec();
@@ -121,26 +161,29 @@ impl<'a> Runtime<'a> {
         "def" => {
           if let Some([name, val]) = list.get(1..3) {
             let ExprKind::Symbol(name) = &name.kind else {
-              return Err("def: invalid name".to_string());
+              return Err(Error::Message("def: invalid name".to_string()));
             };
             let val = self.eval_expr(val)?;
             self.context.define(name.clone(), val.clone());
             Ok(val)
           } else {
-            Err("invalid def".to_string())
+            Err(Error::Message("invalid def".to_string()))
           }
         }
 
         "set" => {
           if let Some([name, val]) = list.get(1..3) {
             let ExprKind::Symbol(name) = &name.kind else {
-              return Err("set: invalid name".to_string());
+              return Err(Error::Message("set: invalid name".to_string()));
             };
             let val = self.eval_expr(val)?;
-            self.context.set(name.clone(), val.clone())?;
+            self
+              .context
+              .set(name.clone(), val.clone())
+              .map_err(Error::Message)?;
             Ok(val)
           } else {
-            Err("invalid set".to_string())
+            Err(Error::Message("invalid set".to_string()))
           }
         }
 
@@ -153,10 +196,18 @@ impl<'a> Runtime<'a> {
               Ok(kind) => Ok(Expr {
                 kind: kind.normalize_numeric(),
               }),
-              Err(_) => Err("'+' requires numeric arguments".to_string()),
+              Err(_) => Err(Error::Message(
+                "'+' requires numeric arguments".to_string(),
+              )),
             }
           } else {
-            Err("'+' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "+".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -169,10 +220,18 @@ impl<'a> Runtime<'a> {
               Ok(kind) => Ok(Expr {
                 kind: kind.normalize_numeric(),
               }),
-              Err(_) => Err("'-' requires numeric arguments".to_string()),
+              Err(_) => Err(Error::Message(
+                "'-' requires numeric arguments".to_string(),
+              )),
             }
           } else {
-            Err("'-' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "-".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -185,10 +244,18 @@ impl<'a> Runtime<'a> {
               Ok(kind) => Ok(Expr {
                 kind: kind.normalize_numeric(),
               }),
-              Err(_) => Err("'*' requires numeric arguments".to_string()),
+              Err(_) => Err(Error::Message(
+                "'*' requires numeric arguments".to_string(),
+              )),
             }
           } else {
-            Err("'*' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "*".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -200,10 +267,10 @@ impl<'a> Runtime<'a> {
 
             match &rhs {
               ExprKind::Integer(0) => {
-                return Err("'/' division by zero".to_string());
+                return Err(Error::Message("'/' division by zero".to_string()));
               }
               ExprKind::Float(f) if *f == 0.0 => {
-                return Err("'/' division by zero".to_string());
+                return Err(Error::Message("'/' division by zero".to_string()));
               }
               _ => {}
             }
@@ -212,10 +279,18 @@ impl<'a> Runtime<'a> {
               Ok(kind) => Ok(Expr {
                 kind: kind.normalize_numeric(),
               }),
-              Err(_) => Err("'/' requires numeric arguments".to_string()),
+              Err(_) => Err(Error::Message(
+                "'/' requires numeric arguments".to_string(),
+              )),
             }
           } else {
-            Err("'/' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "/".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -227,10 +302,10 @@ impl<'a> Runtime<'a> {
 
             match &rhs {
               ExprKind::Integer(0) => {
-                return Err("'%' modulo by zero".to_string());
+                return Err(Error::Message("'%' modulo by zero".to_string()));
               }
               ExprKind::Float(f) if *f == 0.0 => {
-                return Err("'%' modulo by zero".to_string());
+                return Err(Error::Message("'%' modulo by zero".to_string()));
               }
               _ => {}
             }
@@ -239,10 +314,18 @@ impl<'a> Runtime<'a> {
               Ok(kind) => Ok(Expr {
                 kind: kind.normalize_numeric(),
               }),
-              Err(_) => Err("'%' requires numeric arguments".to_string()),
+              Err(_) => Err(Error::Message(
+                "'%' requires numeric arguments".to_string(),
+              )),
             }
           } else {
-            Err("'%' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "%".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -255,7 +338,13 @@ impl<'a> Runtime<'a> {
               kind: ExprKind::Boolean(lhs == rhs),
             })
           } else {
-            Err("'=' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "=".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -268,7 +357,13 @@ impl<'a> Runtime<'a> {
               kind: ExprKind::Boolean(lhs != rhs),
             })
           } else {
-            Err("'!=' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "!=".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -281,10 +376,18 @@ impl<'a> Runtime<'a> {
               Some(ord) => Ok(Expr {
                 kind: ExprKind::Boolean(ord.is_lt()),
               }),
-              None => Err("'<' requires comparable arguments".to_string()),
+              None => Err(Error::Message(
+                "'<' requires comparable arguments".to_string(),
+              )),
             }
           } else {
-            Err("'<' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "<".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -297,10 +400,18 @@ impl<'a> Runtime<'a> {
               Some(ord) => Ok(Expr {
                 kind: ExprKind::Boolean(ord.is_le()),
               }),
-              None => Err("'<=' requires comparable arguments".to_string()),
+              None => Err(Error::Message(
+                "'<=' requires comparable arguments".to_string(),
+              )),
             }
           } else {
-            Err("'<=' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "<=".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -313,10 +424,18 @@ impl<'a> Runtime<'a> {
               Some(ord) => Ok(Expr {
                 kind: ExprKind::Boolean(ord.is_gt()),
               }),
-              None => Err("'>' requires comparable arguments".to_string()),
+              None => Err(Error::Message(
+                "'>' requires comparable arguments".to_string(),
+              )),
             }
           } else {
-            Err("'>' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: ">".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -329,10 +448,18 @@ impl<'a> Runtime<'a> {
               Some(ord) => Ok(Expr {
                 kind: ExprKind::Boolean(ord.is_ge()),
               }),
-              None => Err("'>=' requires comparable arguments".to_string()),
+              None => Err(Error::Message(
+                "'>=' requires comparable arguments".to_string(),
+              )),
             }
           } else {
-            Err("'>=' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: ">=".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -340,7 +467,9 @@ impl<'a> Runtime<'a> {
           if let Some([lhs, rhs]) = list.get(1..3) {
             let lhs = self.eval_expr(lhs)?.kind;
             let ExprKind::Boolean(lhs) = lhs else {
-              return Err("'and' requires boolean arguments".to_string());
+              return Err(Error::Message(
+                "'and' requires boolean arguments".to_string(),
+              ));
             };
             if !lhs {
               return Ok(Expr {
@@ -349,13 +478,21 @@ impl<'a> Runtime<'a> {
             }
             let rhs = self.eval_expr(rhs)?.kind;
             let ExprKind::Boolean(rhs) = rhs else {
-              return Err("'and' requires boolean arguments".to_string());
+              return Err(Error::Message(
+                "'and' requires boolean arguments".to_string(),
+              ));
             };
             Ok(Expr {
               kind: ExprKind::Boolean(rhs),
             })
           } else {
-            Err("'and' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "and".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -363,7 +500,9 @@ impl<'a> Runtime<'a> {
           if let Some([lhs, rhs]) = list.get(1..3) {
             let lhs = self.eval_expr(lhs)?.kind;
             let ExprKind::Boolean(lhs) = lhs else {
-              return Err("'or' requires boolean arguments".to_string());
+              return Err(Error::Message(
+                "'or' requires boolean arguments".to_string(),
+              ));
             };
             if lhs {
               return Ok(Expr {
@@ -372,13 +511,21 @@ impl<'a> Runtime<'a> {
             }
             let rhs = self.eval_expr(rhs)?.kind;
             let ExprKind::Boolean(rhs) = rhs else {
-              return Err("'or' requires boolean arguments".to_string());
+              return Err(Error::Message(
+                "'or' requires boolean arguments".to_string(),
+              ));
             };
             Ok(Expr {
               kind: ExprKind::Boolean(rhs),
             })
           } else {
-            Err("'or' requires two arguments".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "or".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len().saturating_sub(1),
+              },
+            }))
           }
         }
 
@@ -386,13 +533,21 @@ impl<'a> Runtime<'a> {
           if let Some(operand) = list.get(1) {
             let val = self.eval_expr(operand)?.kind;
             let ExprKind::Boolean(b) = val else {
-              return Err("'not' requires a boolean argument".to_string());
+              return Err(Error::Message(
+                "'not' requires a boolean argument".to_string(),
+              ));
             };
             Ok(Expr {
               kind: ExprKind::Boolean(!b),
             })
           } else {
-            Err("'not' requires one argument".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "not".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 1,
+                received: 0,
+              },
+            }))
           }
         }
 
@@ -408,10 +563,18 @@ impl<'a> Runtime<'a> {
                 kind: ExprKind::Integer(list.len() as i64),
               })
             } else {
-              Err("'len' requires one string or list argument".to_string())
+              Err(Error::Message(
+                "'len' requires one string or list argument".to_string(),
+              ))
             }
           } else {
-            Err("'len' requires one argument".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "len".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 1,
+                received: 0,
+              },
+            }))
           }
         }
 
@@ -422,7 +585,13 @@ impl<'a> Runtime<'a> {
               kind: ExprKind::String(val.type_name().to_string()),
             })
           } else {
-            Err("'typeof' requires one argument".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "typeof".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 1,
+                received: 0,
+              },
+            }))
           }
         }
 
@@ -437,22 +606,27 @@ impl<'a> Runtime<'a> {
               kind: ExprKind::Nil,
             })
           } else {
-            Err("'print' requires at least one argument".to_string())
+            Err(Error::CallError(CallError {
+              symbol: "print".to_owned(),
+              kind: CallErrorKind::IncorrectArity {
+                expected: 1,
+                received: 0,
+              },
+            }))
           }
         }
 
         _ => {
           // Symbol look-up.
-          let val = self
-            .context
-            .get(sym)
-            .cloned()
-            .ok_or_else(|| format!("undefined '{}'", sym))?;
+          let val =
+            self.context.get(symbol.as_str()).cloned().ok_or_else(|| {
+              Error::Message(format!("undefined '{}'", symbol))
+            })?;
           if let ExprKind::Function { params, body, env } = val.kind {
             let call_args = list.get(1..).unwrap_or(&[]);
-            self.call(env, params, body, call_args, sym.as_ref())
+            self.call(env, params, body, call_args, symbol.as_ref())
           } else {
-            Err(format!("'{}' is not a function", sym))
+            Err(Error::Message(format!("'{}' is not a function", symbol)))
           }
         }
       }
@@ -474,7 +648,7 @@ impl<'a> Runtime<'a> {
         .context
         .get(sym)
         .cloned()
-        .ok_or_else(|| format!("undefined fn '{}'", sym))
+        .ok_or_else(|| Error::Message(format!("undefined fn '{}'", sym)))
     } else {
       Ok(expr.clone())
     }
@@ -494,7 +668,7 @@ mod tests {
       kind: ExprKind::Nil,
     };
     for expr in &exprs {
-      last = runtime.eval_expr(expr)?;
+      last = runtime.eval_expr(expr).map_err(|e| e.to_string())?;
     }
     Ok(last)
   }

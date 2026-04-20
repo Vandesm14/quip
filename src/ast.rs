@@ -253,6 +253,21 @@ impl<'a> ExprKind<'a> {
       other => other,
     }
   }
+
+  pub fn type_name(&self) -> &'static str {
+    match self {
+      ExprKind::Nil => "nil",
+      ExprKind::String(..) => "string",
+      ExprKind::Keyword(..) => "keyword",
+      ExprKind::Symbol(..) => "symbol",
+      ExprKind::Float(..) => "float",
+      ExprKind::Integer(..) => "integer",
+      ExprKind::Boolean(..) => "boolean",
+      ExprKind::List(..) => "list",
+      ExprKind::Map(..) => "map",
+      ExprKind::Function { .. } => "function",
+    }
+  }
 }
 
 impl<'a> core::fmt::Display for ExprKind<'a> {

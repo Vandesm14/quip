@@ -396,6 +396,36 @@ impl<'a> Runtime<'a> {
           }
         }
 
+        "len" => {
+          if let Some(operand) = list.get(1) {
+            let val = self.eval_expr(operand)?.kind;
+            if let ExprKind::String(str) = val {
+              Ok(Expr {
+                kind: ExprKind::Integer(str.len() as i64),
+              })
+            } else if let ExprKind::List(list) = val {
+              Ok(Expr {
+                kind: ExprKind::Integer(list.len() as i64),
+              })
+            } else {
+              Err("'len' requires one string or list argument".to_string())
+            }
+          } else {
+            Err("'len' requires one argument".to_string())
+          }
+        }
+
+        "typeof" => {
+          if let Some(operand) = list.get(1) {
+            let val = self.eval_expr(operand)?.kind;
+            Ok(Expr {
+              kind: ExprKind::String(val.type_name().to_string()),
+            })
+          } else {
+            Err("'typeof' requires one argument".to_string())
+          }
+        }
+
         "print" => {
           if let Some(args) = list.get(1..) {
             let parts = args
@@ -1105,6 +1135,158 @@ mod tests {
             assert!(run("(not)").is_err());
           }
         }
+      }
+    }
+
+    mod string_list {
+      use super::*;
+
+      mod len {
+        use super::*;
+
+        #[test]
+        fn len_of_empty_string() {
+          assert_eq!(run("(len \"\")").unwrap().kind, ExprKind::Integer(0));
+        }
+
+        #[test]
+        fn len_of_string() {
+          assert_eq!(
+            run("(len \"hello\")").unwrap().kind,
+            ExprKind::Integer(5)
+          );
+        }
+
+        #[test]
+        fn len_of_empty_list() {
+          assert_eq!(run("(len ())").unwrap().kind, ExprKind::Integer(0));
+        }
+
+        #[test]
+        fn len_of_list_with_integers() {
+          assert_eq!(run("(len (1 2 3))").unwrap().kind, ExprKind::Integer(3));
+        }
+
+        #[test]
+        fn len_of_list_with_mixed_types() {
+          assert_eq!(
+            run("(len (1 \"hello\" true))").unwrap().kind,
+            ExprKind::Integer(3)
+          );
+        }
+
+        #[test]
+        fn len_requires_one_argument() {
+          assert!(run("(len)").is_err());
+        }
+
+        #[test]
+        fn len_requires_string_or_list() {
+          assert!(run("(len 42)").is_err());
+        }
+
+        #[test]
+        fn len_of_boolean_fails() {
+          assert!(run("(len true)").is_err());
+        }
+
+        #[test]
+        fn len_of_nil_fails() {
+          assert!(run("(len nil)").is_err());
+        }
+      }
+    }
+
+    mod r#typeof {
+      use super::*;
+
+      #[test]
+      fn typeof_integer() {
+        let result = run("(typeof 42)").unwrap();
+        assert_eq!(result.kind, ExprKind::String("integer".to_string()));
+      }
+
+      #[test]
+      fn typeof_float() {
+        let result = run("(typeof 3.14)").unwrap();
+        assert_eq!(result.kind, ExprKind::String("float".to_string()));
+      }
+
+      #[test]
+      fn typeof_string() {
+        let result = run("(typeof \"hello\")").unwrap();
+        assert_eq!(result.kind, ExprKind::String("string".to_string()));
+      }
+
+      #[test]
+      fn typeof_empty_string() {
+        let result = run("(typeof \"\")").unwrap();
+        assert_eq!(result.kind, ExprKind::String("string".to_string()));
+      }
+
+      #[test]
+      fn typeof_true_boolean() {
+        let result = run("(typeof true)").unwrap();
+        assert_eq!(result.kind, ExprKind::String("boolean".to_string()));
+      }
+
+      #[test]
+      fn typeof_false_boolean() {
+        let result = run("(typeof false)").unwrap();
+        assert_eq!(result.kind, ExprKind::String("boolean".to_string()));
+      }
+
+      #[test]
+      fn typeof_nil() {
+        let result = run("(typeof nil)").unwrap();
+        assert_eq!(result.kind, ExprKind::String("nil".to_string()));
+      }
+
+      #[test]
+      fn typeof_list() {
+        let result = run("(typeof (1 2 3))").unwrap();
+        assert_eq!(result.kind, ExprKind::String("list".to_string()));
+      }
+
+      #[test]
+      fn typeof_empty_list() {
+        let result = run("(typeof ())").unwrap();
+        assert_eq!(result.kind, ExprKind::String("list".to_string()));
+      }
+
+      #[test]
+      fn typeof_function() {
+        let result = run("(typeof (fn () 42))").unwrap();
+        assert_eq!(result.kind, ExprKind::String("function".to_string()));
+      }
+
+      #[test]
+      fn typeof_of_defined_function() {
+        let result = run("(defn foo () 42) (typeof foo)").unwrap();
+        assert_eq!(result.kind, ExprKind::String("function".to_string()));
+      }
+
+      #[test]
+      fn typeof_of_defined_var() {
+        let result = run("(def foo 42) (typeof foo)").unwrap();
+        assert_eq!(result.kind, ExprKind::String("integer".to_string()));
+      }
+
+      #[test]
+      fn typeof_requires_one_argument() {
+        assert!(run("(typeof)").is_err());
+      }
+
+      #[test]
+      fn typeof_returns_correct_type_in_expression() {
+        let result = run("(= (typeof \"test\") \"string\")").unwrap();
+        assert_eq!(result.kind, ExprKind::Boolean(true));
+      }
+
+      #[test]
+      fn typeof_returns_different_types_are_not_equal() {
+        let result = run("(= (typeof 42) (typeof \"42\"))").unwrap();
+        assert_eq!(result.kind, ExprKind::Boolean(false));
       }
     }
   }

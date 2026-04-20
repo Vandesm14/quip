@@ -20,7 +20,7 @@
   - [x] `or`
   - [x] `not`
 - [ ] List/String
-  - [ ] `len`
+  - [x] `len`
   - [ ] `nth`
   - [ ] `set-nth`
   - [ ] `push`
@@ -35,7 +35,7 @@
   - [ ] `entries`
 - [ ] Type
   - [ ] `cast`
-  - [ ] `typeof`
+  - [x] `typeof`
   - [ ] `lazy`
   - [x] `fn`
   - [ ] `list`
@@ -43,9 +43,9 @@
 - [ ] Control Flow
   - [ ] `if`
   - [ ] `exit`
-- [ ] Debugging
+- [ ] I/O & Debugging
+  - [x] `print`
   - [ ] `debug`
-  - [ ] `print`
   - [ ] `assert`
 - [ ] Special
   - [ ] `call`

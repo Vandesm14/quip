@@ -23,8 +23,6 @@
   - [ ] `len`
   - [ ] `nth`
   - [ ] `set-nth`
-  - [ ] `split`
-  - [ ] `concat`
   - [ ] `push`
   - [ ] `pop`
 - [ ] Record
@@ -34,6 +32,7 @@
   - [ ] `remove`
   - [ ] `keys`
   - [ ] `values`
+  - [ ] `entries`
 - [ ] Type
   - [ ] `cast`
   - [ ] `typeof`
@@ -44,11 +43,11 @@
 - [ ] Control Flow
   - [ ] `if`
   - [ ] `exit`
-  - [ ] `call`
 - [ ] Debugging
   - [ ] `debug`
   - [ ] `print`
   - [ ] `assert`
 - [ ] Special
+  - [ ] `call`
   - [ ] `recur`
   - [ ] `import`

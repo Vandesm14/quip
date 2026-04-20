@@ -74,11 +74,11 @@ fn run_repl() {
           _ => {}
         }
 
-        let source: &'static str = Box::leak(line.into_boxed_str());
-        let tokens = lex(source);
+        let tokens = lex(&line);
 
-        match parse(source, tokens) {
+        match parse(&line, tokens) {
           Ok(exprs) => {
+            let exprs: Vec<_> = exprs.into_iter().map(|e| e.into_owned()).collect();
             for expr in &exprs {
               match runtime.eval_expr(expr) {
                 Ok(result) => println!("{result}"),
@@ -107,7 +107,7 @@ fn run_stdin() {
     eprintln!("error: {e}");
     std::process::exit(1);
   }
-  run_source(source);
+  run_source(&source);
 }
 
 fn run_file(input: &PathBuf) {
@@ -118,11 +118,10 @@ fn run_file(input: &PathBuf) {
       std::process::exit(1);
     }
   };
-  run_source(source);
+  run_source(&source);
 }
 
-fn run_source(source: String) {
-  let source: &'static str = Box::leak(source.into_boxed_str());
+fn run_source(source: &str) {
   let tokens = lex(source);
   let exprs = match parse(source, tokens) {
     Ok(e) => e,

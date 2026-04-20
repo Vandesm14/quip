@@ -197,6 +197,16 @@ impl<'a> core::fmt::Display for Expr<'a> {
   }
 }
 
+impl<'a> Expr<'a> {
+  /// Converts all borrowed string slices into owned `String`s, producing an
+  /// `Expr<'static>` that is independent of any source lifetime.
+  pub fn into_owned(self) -> Expr<'static> {
+    Expr {
+      kind: self.kind.into_owned(),
+    }
+  }
+}
+
 #[derive(Debug, Clone, Default, EnumDiscriminants)]
 #[strum_discriminants(name(ExprKindVariants))]
 pub enum ExprKind<'a> {
@@ -223,6 +233,35 @@ pub enum ExprKind<'a> {
 }
 
 impl<'a> ExprKind<'a> {
+  pub fn into_owned(self) -> ExprKind<'static> {
+    match self {
+      ExprKind::Nil => ExprKind::Nil,
+      ExprKind::String(s) => ExprKind::String(s),
+      ExprKind::Keyword(k) => ExprKind::Keyword(Cow::Owned(k.into_owned())),
+      ExprKind::Symbol(s) => ExprKind::Symbol(Cow::Owned(s.into_owned())),
+      ExprKind::Float(f) => ExprKind::Float(f),
+      ExprKind::Integer(i) => ExprKind::Integer(i),
+      ExprKind::Boolean(b) => ExprKind::Boolean(b),
+      ExprKind::List(list) => {
+        ExprKind::List(list.into_iter().map(Expr::into_owned).collect())
+      }
+      ExprKind::Map(map) => ExprKind::Map(
+        map
+          .into_iter()
+          .map(|(k, v)| (Cow::Owned(k.into_owned()), v.into_owned()))
+          .collect(),
+      ),
+      ExprKind::Function { params, body, env } => ExprKind::Function {
+        params: params
+          .into_iter()
+          .map(|p| Cow::Owned(p.into_owned()))
+          .collect(),
+        body: body.into_iter().map(Expr::into_owned).collect(),
+        env,
+      },
+    }
+  }
+
   /// Promotes two numeric operands to a common type. If either operand is a
   /// [`Float`], both are returned as [`Float`]s. Non-numeric operands are
   /// returned unchanged.

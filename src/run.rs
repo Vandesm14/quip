@@ -235,7 +235,7 @@ impl<'a> Runtime<'a> {
             }
           } else {
             Err(Error::CallError(CallError {
-              symbol: "+".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -259,7 +259,7 @@ impl<'a> Runtime<'a> {
             }
           } else {
             Err(Error::CallError(CallError {
-              symbol: "-".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -283,7 +283,7 @@ impl<'a> Runtime<'a> {
             }
           } else {
             Err(Error::CallError(CallError {
-              symbol: "*".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -318,7 +318,7 @@ impl<'a> Runtime<'a> {
             }
           } else {
             Err(Error::CallError(CallError {
-              symbol: "/".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -353,7 +353,7 @@ impl<'a> Runtime<'a> {
             }
           } else {
             Err(Error::CallError(CallError {
-              symbol: "%".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -372,7 +372,7 @@ impl<'a> Runtime<'a> {
             })
           } else {
             Err(Error::CallError(CallError {
-              symbol: "=".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -391,7 +391,7 @@ impl<'a> Runtime<'a> {
             })
           } else {
             Err(Error::CallError(CallError {
-              symbol: "!=".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -415,7 +415,7 @@ impl<'a> Runtime<'a> {
             }
           } else {
             Err(Error::CallError(CallError {
-              symbol: "<".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -439,7 +439,7 @@ impl<'a> Runtime<'a> {
             }
           } else {
             Err(Error::CallError(CallError {
-              symbol: "<=".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -463,7 +463,7 @@ impl<'a> Runtime<'a> {
             }
           } else {
             Err(Error::CallError(CallError {
-              symbol: ">".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -487,7 +487,7 @@ impl<'a> Runtime<'a> {
             }
           } else {
             Err(Error::CallError(CallError {
-              symbol: ">=".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -520,7 +520,7 @@ impl<'a> Runtime<'a> {
             })
           } else {
             Err(Error::CallError(CallError {
-              symbol: "and".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -575,7 +575,7 @@ impl<'a> Runtime<'a> {
             })
           } else {
             Err(Error::CallError(CallError {
-              symbol: "not".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 1,
                 received: 0,
@@ -602,7 +602,7 @@ impl<'a> Runtime<'a> {
             }
           } else {
             Err(Error::CallError(CallError {
-              symbol: "len".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 1,
                 received: 0,
@@ -619,7 +619,51 @@ impl<'a> Runtime<'a> {
             })
           } else {
             Err(Error::CallError(CallError {
-              symbol: "typeof".to_owned(),
+              symbol,
+              kind: CallErrorKind::IncorrectArity {
+                expected: 1,
+                received: 0,
+              },
+            }))
+          }
+        }
+
+        "lazy" => {
+          // (lazy val)
+          let Some(inner) = list.get(1) else {
+            return Err(Error::CallError(CallError {
+              symbol,
+              kind: CallErrorKind::IncorrectArity {
+                expected: 1,
+                received: 0,
+              },
+            }));
+          };
+          Ok(inner.clone())
+        }
+
+        "eval" => {
+          // (eval val)
+          // Evaluates val.
+          let Some(inner) = list.get(1) else {
+            return Err(Error::CallError(CallError {
+              symbol,
+              kind: CallErrorKind::IncorrectArity {
+                expected: 1,
+                received: 0,
+              },
+            }));
+          };
+          let result = self.eval_expr(inner)?;
+          self.eval_expr(&result)
+        }
+
+        "force" => {
+          // (force val)
+          // Evaluates val and if the result is a function, calls it.
+          let Some(inner) = list.get(1) else {
+            return Err(Error::CallError(CallError {
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 1,
                 received: 0,
@@ -640,7 +684,7 @@ impl<'a> Runtime<'a> {
             })
           } else {
             Err(Error::CallError(CallError {
-              symbol: "print".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 1,
                 received: 0,
@@ -663,7 +707,7 @@ impl<'a> Runtime<'a> {
         "nth" => {
           let Some([idx_expr, col_expr]) = list.get(1..3) else {
             return Err(Error::CallError(CallError {
-              symbol: "nth".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -673,7 +717,7 @@ impl<'a> Runtime<'a> {
           let idx_val = self.eval_expr(idx_expr)?;
           let ExprKind::Integer(idx) = idx_val.kind else {
             return Err(Error::CallError(CallError {
-              symbol: "nth".to_owned(),
+              symbol,
               kind: CallErrorKind::TypeMismatch {
                 expected: vec!["integer".to_owned()],
                 received: vec![idx_val.kind.type_name().to_owned()],
@@ -702,7 +746,7 @@ impl<'a> Runtime<'a> {
                 Error::Message(format!("'nth' index {} out of bounds", idx))
               }),
             _ => Err(Error::CallError(CallError {
-              symbol: "nth".to_owned(),
+              symbol,
               kind: CallErrorKind::TypeMismatch {
                 expected: vec!["list".to_owned(), "string".to_owned()],
                 received: vec![col_type],
@@ -714,7 +758,7 @@ impl<'a> Runtime<'a> {
         "set-nth" => {
           let Some([idx_expr, list_expr, val_expr]) = list.get(1..4) else {
             return Err(Error::CallError(CallError {
-              symbol: "set-nth".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 3,
                 received: list.len().saturating_sub(1),
@@ -724,7 +768,7 @@ impl<'a> Runtime<'a> {
           let idx_val = self.eval_expr(idx_expr)?;
           let ExprKind::Integer(idx) = idx_val.kind else {
             return Err(Error::CallError(CallError {
-              symbol: "set-nth".to_owned(),
+              symbol,
               kind: CallErrorKind::TypeMismatch {
                 expected: vec!["integer".to_owned()],
                 received: vec![idx_val.kind.type_name().to_owned()],
@@ -742,7 +786,7 @@ impl<'a> Runtime<'a> {
           let list_type = list_val.kind.type_name().to_owned();
           let ExprKind::List(items) = list_val.kind else {
             return Err(Error::CallError(CallError {
-              symbol: "set-nth".to_owned(),
+              symbol,
               kind: CallErrorKind::TypeMismatch {
                 expected: vec!["list".to_owned()],
                 received: vec![list_type],
@@ -765,7 +809,7 @@ impl<'a> Runtime<'a> {
         "push" => {
           let Some([list_expr, val_expr]) = list.get(1..3) else {
             return Err(Error::CallError(CallError {
-              symbol: "push".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -777,7 +821,7 @@ impl<'a> Runtime<'a> {
           let list_type = list_val.kind.type_name().to_owned();
           let ExprKind::List(items) = list_val.kind else {
             return Err(Error::CallError(CallError {
-              symbol: "push".to_owned(),
+              symbol,
               kind: CallErrorKind::TypeMismatch {
                 expected: vec!["list".to_owned()],
                 received: vec![list_type],
@@ -794,7 +838,7 @@ impl<'a> Runtime<'a> {
         "pop" => {
           let Some(list_expr) = list.get(1) else {
             return Err(Error::CallError(CallError {
-              symbol: "pop".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 1,
                 received: 0,
@@ -805,7 +849,7 @@ impl<'a> Runtime<'a> {
           let list_type = list_val.kind.type_name().to_owned();
           let ExprKind::List(items) = list_val.kind else {
             return Err(Error::CallError(CallError {
-              symbol: "pop".to_owned(),
+              symbol,
               kind: CallErrorKind::TypeMismatch {
                 expected: vec!["list".to_owned()],
                 received: vec![list_type],

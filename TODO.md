@@ -36,7 +36,7 @@
 - [ ] Type
   - [ ] `cast`
   - [x] `typeof`
-  - [ ] `lazy`
+  - [x] `lazy`
   - [x] `fn`
   - [x] `list`
   - [ ] `map`

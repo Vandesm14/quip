@@ -115,6 +115,14 @@ impl<'a> Runtime<'a> {
     {
       let symbol = sym.to_string();
       match symbol.as_str() {
+        "lazy" => {
+          // (lazy val)
+          let Some(inner) = list.get(1) else {
+            return Err(Error::Message("lazy: expected a value".to_string()));
+          };
+          Ok(inner.clone())
+        }
+
         "fn" => {
           // (fn (params...) body...)
           let Some(params_expr) = list.get(1) else {
@@ -1712,19 +1720,18 @@ mod tests {
         }
       }
 
-      // TODO: enable once we have symbols working better.
-      // #[test]
-      // fn list_with_symbols() {
-      //   let result = run("(list a b c)").unwrap();
-      //   if let ExprKind::List(items) = result.kind {
-      //     assert_eq!(items.len(), 3);
-      //     assert_eq!(items[0].kind, ExprKind::Symbol("a".into()));
-      //     assert_eq!(items[1].kind, ExprKind::Symbol("b".into()));
-      //     assert_eq!(items[2].kind, ExprKind::Symbol("c".into()));
-      //   } else {
-      //     panic!("Expected list");
-      //   }
-      // }
+      #[test]
+      fn list_with_symbols() {
+        let result = run("(list (lazy a) (lazy b) (lazy c))").unwrap();
+        if let ExprKind::List(items) = result.kind {
+          assert_eq!(items.len(), 3);
+          assert_eq!(items[0].kind, ExprKind::Symbol("a".into()));
+          assert_eq!(items[1].kind, ExprKind::Symbol("b".into()));
+          assert_eq!(items[2].kind, ExprKind::Symbol("c".into()));
+        } else {
+          panic!("Expected list");
+        }
+      }
 
       #[test]
       fn list_with_variables() {

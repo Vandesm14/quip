@@ -49,5 +49,6 @@
   - [ ] `assert`
 - [ ] Special
   - [ ] `call`
+  - [ ] `eval`
   - [ ] `recur`
   - [ ] `import`

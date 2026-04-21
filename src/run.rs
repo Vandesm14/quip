@@ -640,7 +640,13 @@ impl<'a> Runtime<'a> {
           let val = self.eval_expr(inner)?;
           let val = self.eval_expr(&val)?;
           if let ExprKind::Function { params, body, env } = val.kind {
-            self.call(env, params, body, &[], "force")
+            self.call(
+              env,
+              params,
+              body,
+              list.get(2..).unwrap_or_default(),
+              &format!("(force {})", inner),
+            )
           } else {
             Ok(val)
           }

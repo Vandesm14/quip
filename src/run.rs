@@ -625,8 +625,8 @@ impl<'a> Runtime<'a> {
           self.eval_expr(&result)
         }
 
-        "force" => {
-          // (force val)
+        "call" => {
+          // (call val)
           // Evaluates val and if the result is a function, calls it.
           let Some(inner) = list.get(1) else {
             return Err(Error::CallError(CallError {
@@ -645,7 +645,7 @@ impl<'a> Runtime<'a> {
               params,
               body,
               list.get(2..).unwrap_or_default(),
-              &format!("(force {})", inner),
+              &format!("(call {})", inner),
             )
           } else {
             Ok(val)
@@ -2200,58 +2200,69 @@ mod tests {
     }
   }
 
-  mod force {
+  mod call {
     use super::*;
 
     #[test]
-    fn force_thunk_calls_zero_arg_fn() {
-      let result = run("(force (fn () 42))").unwrap();
+    fn call_thunk_calls_zero_arg_fn() {
+      let result = run("(call (fn () 42))").unwrap();
       assert_eq!(result.kind, ExprKind::Integer(42));
     }
 
     #[test]
-    fn force_non_fn_returns_value() {
-      let result = run("(force 99)").unwrap();
+    fn call_thunk_calls_one_arg_fn() {
+      let result = run("(call (fn (a) a) 2)").unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(2));
+    }
+
+    #[test]
+    fn call_thunk_calls_one_arg_fn_err() {
+      let result = run("(call (fn (a) a))");
+      assert!(result.is_err());
+    }
+
+    #[test]
+    fn call_non_fn_returns_value() {
+      let result = run("(call 99)").unwrap();
       assert_eq!(result.kind, ExprKind::Integer(99));
     }
 
     #[test]
-    fn force_fn_from_var() {
-      let result = run("(def t (fn () 1)) (force t)").unwrap();
+    fn call_fn_from_var() {
+      let result = run("(def t (fn () 1)) (call t)").unwrap();
       assert_eq!(result.kind, ExprKind::Integer(1));
     }
 
     #[test]
-    fn force_expr_from_var() {
-      let result = run("(def t (lazy (+ 1 2))) (force t)").unwrap();
+    fn call_expr_from_var() {
+      let result = run("(def t (lazy (+ 1 2))) (call t)").unwrap();
       assert_eq!(result.kind, ExprKind::Integer(3));
     }
 
     #[test]
-    fn force_lazy_expr() {
-      let result = run("(force (lazy (+ 1 2)))").unwrap();
+    fn call_lazy_expr() {
+      let result = run("(call (lazy (+ 1 2)))").unwrap();
       assert_eq!(result.kind, ExprKind::Integer(3));
     }
 
     #[test]
-    fn force_double_fn() {
+    fn call_double_fn() {
       let result =
-        run("(def a 0) (force (fn () (set a 1) (fn () (set a 2)))) a").unwrap();
+        run("(def a 0) (call (fn () (set a 1) (fn () (set a 2)))) a").unwrap();
       assert_eq!(result.kind, ExprKind::Integer(1));
     }
 
     #[test]
-    fn force_double_fn_from_var() {
-      let result = run(
-        "(def a 0) (def t (fn () (set a 1) (fn () (set a 2)))) (force t) a",
-      )
-      .unwrap();
+    fn call_double_fn_from_var() {
+      let result =
+        run("(def a 0) (def t (fn () (set a 1) (fn () (set a 2)))) (call t) a")
+          .unwrap();
       assert_eq!(result.kind, ExprKind::Integer(1));
     }
 
     #[test]
-    fn force_missing_arg_errors() {
-      let result = run("(force)");
+    fn call_missing_arg_errors() {
+      let result = run("(call)");
       assert!(result.is_err());
     }
   }

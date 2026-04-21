@@ -94,6 +94,9 @@ fn run_repl() {
           Err(e) => eprintln!("error: {e}"),
         }
       }
+      Ok(_) => {
+        eprintln!("unknown signal");
+      }
       Err(e) => {
         eprintln!("error: {e}");
         break;

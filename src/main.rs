@@ -5,7 +5,9 @@ use quip::{
   ast::{lex, parse},
   run::Runtime,
 };
-use reedline::{DefaultPrompt, DefaultPromptSegment, Reedline, Signal};
+use reedline::{
+  DefaultPrompt, DefaultPromptSegment, DefaultValidator, Reedline, Signal,
+};
 
 #[derive(Debug, clap::Parser)]
 #[command(author, version, about, long_about = None)]
@@ -41,14 +43,13 @@ fn main() {
 }
 
 fn run_repl() {
-  let mut repl = Reedline::create();
+  let mut repl = Reedline::create().with_validator(Box::new(DefaultValidator));
   let prompt = DefaultPrompt::new(
     DefaultPromptSegment::Basic("quip".to_string()),
     DefaultPromptSegment::Empty,
   );
 
   let mut runtime: Runtime<'static> = Runtime::default();
-
   loop {
     match repl.read_line(&prompt) {
       Ok(Signal::CtrlC) | Ok(Signal::CtrlD) => {

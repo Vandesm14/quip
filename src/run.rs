@@ -123,6 +123,20 @@ impl<'a> Runtime<'a> {
           Ok(inner.clone())
         }
 
+        "force" => {
+          // (force val)
+          // Evaluates val and if the result is a function, calls it.
+          let Some(inner) = list.get(1) else {
+            return Err(Error::Message("force: expected a value".to_string()));
+          };
+          let val = self.eval_expr(inner)?;
+          if let ExprKind::Function { params, body, env } = val.kind {
+            self.call(env, params, body, &[], "force")
+          } else {
+            Ok(val)
+          }
+        }
+
         "fn" => {
           // (fn (params...) body...)
           let Some(params_expr) = list.get(1) else {
@@ -2074,6 +2088,37 @@ mod tests {
         let result = run("(pop)");
         assert!(result.is_err());
       }
+    }
+  }
+
+  mod force {
+    use super::*;
+
+    #[test]
+    fn force_thunk_calls_zero_arg_fn() {
+      let result = run("(force (fn () 42))").unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(42));
+    }
+
+    #[test]
+    fn force_non_fn_returns_value() {
+      let result = run("(force 99)").unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(99));
+    }
+
+    #[test]
+    fn force_lazy_value_returns_unevaluated_list() {
+      let result = run("(def t (lazy (fn () 7))) (force t)").unwrap();
+      let ExprKind::List(items) = result.kind else {
+        panic!("expected list");
+      };
+      assert_eq!(items[0].kind, ExprKind::Symbol("fn".into()));
+    }
+
+    #[test]
+    fn force_missing_arg_errors() {
+      let result = run("(force)");
+      assert!(result.is_err());
     }
   }
 

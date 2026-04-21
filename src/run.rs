@@ -133,12 +133,12 @@ impl<'a> Runtime<'a> {
 
         "defn" => {
           // (defn name (params...) body...)  →  (def name (fn (params...) body...))
-          let Some([name_expr, params_expr]) = list.get(1..3) else {
+          let Some([name, params_expr]) = list.get(1..3) else {
             return Err(Error::Message(
               "defn: expected name and params".to_string(),
             ));
           };
-          let ExprKind::Symbol(name) = &name_expr.kind else {
+          let ExprKind::Symbol(sym) = &name.kind else {
             return Err(Error::Message("defn: invalid name".to_string()));
           };
           let ExprKind::List(param_list) = &params_expr.kind else {
@@ -152,20 +152,18 @@ impl<'a> Runtime<'a> {
           let func = Expr {
             kind: ExprKind::Function { params, body, env },
           };
-          self.context.define(name.clone(), func);
-          Ok(Expr {
-            kind: ExprKind::Nil,
-          })
+          self.context.define(sym.clone(), func);
+          Ok(name.clone())
         }
 
         "def" => {
           if let Some([name, val]) = list.get(1..3) {
-            let ExprKind::Symbol(name) = &name.kind else {
+            let ExprKind::Symbol(sym) = &name.kind else {
               return Err(Error::Message("def: invalid name".to_string()));
             };
             let val = self.eval_expr(val)?;
-            self.context.define(name.clone(), val.clone());
-            Ok(val)
+            self.context.define(sym.clone(), val.clone());
+            Ok(name.clone())
           } else {
             Err(Error::Message("invalid def".to_string()))
           }

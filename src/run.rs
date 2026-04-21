@@ -935,18 +935,6 @@ impl<'a> Runtime<'a> {
           }
         }
       }
-    } else if let ExprKind::List(list) = &expr.kind {
-      // Behavior for calling anon functions ((fn ...) args...).
-      let Some(head) = list.first() else {
-        return Ok(expr.clone());
-      };
-      let callee = self.eval_expr(head)?;
-      if let ExprKind::Function { params, body, env } = callee.kind {
-        let call_args = list.get(1..).unwrap_or(&[]);
-        self.call(env, params, body, call_args, "<anonymous>")
-      } else {
-        Ok(expr.clone())
-      }
     } else if let ExprKind::Symbol(sym) = &expr.kind {
       // Get vars.
       self
@@ -2320,7 +2308,7 @@ mod tests {
       (defn outer ()
         (def a 1)
         (fn () a))
-      ((outer))
+      (call (outer))
     ",
       )
       .unwrap();
@@ -2335,7 +2323,7 @@ mod tests {
       (defn outer ()
         (def a 1)
         (fn () (set a 2) a))
-      ((outer))
+      (call (outer))
     ",
       )
       .unwrap();
@@ -2425,13 +2413,13 @@ mod tests {
       };
       assert!(!runtime.context.should_gc());
 
-      eval_source(&mut runtime, "((fn () nil))");
+      eval_source(&mut runtime, "(call (fn () nil))");
       assert!(!runtime.context.should_gc());
 
-      eval_source(&mut runtime, "((fn () nil))");
+      eval_source(&mut runtime, "(call (fn () nil))");
       assert!(runtime.context.should_gc());
 
-      eval_source(&mut runtime, "((fn () nil))");
+      eval_source(&mut runtime, "(call (fn () nil))");
       assert!(runtime.context.should_gc());
     }
 
@@ -2441,7 +2429,7 @@ mod tests {
 
       eval_source(
         &mut runtime,
-        "((fn () nil)) ((fn () nil)) ((fn () nil)) ((fn () nil))",
+        "(call (fn () nil)) (call (fn () nil)) (call (fn () nil)) (call (fn () nil))",
       );
       assert_eq!(runtime.context.envs_len(), 5);
 

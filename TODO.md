@@ -19,12 +19,12 @@
   - [x] `and`
   - [x] `or`
   - [x] `not`
-- [ ] List/String
+- [x] List/String
   - [x] `len`
-  - [ ] `nth`
-  - [ ] `set-nth`
-  - [ ] `push`
-  - [ ] `pop`
+  - [x] `nth`
+  - [x] `set-nth`
+  - [x] `push`
+  - [x] `pop`
 - [ ] Record
   - [ ] `insert`
   - [ ] `get`
@@ -38,7 +38,7 @@
   - [x] `typeof`
   - [ ] `lazy`
   - [x] `fn`
-  - [ ] `list`
+  - [x] `list`
   - [ ] `map`
 - [ ] Control Flow
   - [ ] `if`

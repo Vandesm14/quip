@@ -47,9 +47,9 @@
 - [ ] I/O & Debugging
   - [x] `print`
   - [ ] `debug`
-  - [ ] `assert`
+  - [x] `assert`
 - [ ] Special
   - [ ] `call`
-  - [ ] `eval`
+  - [x] `eval`
   - [ ] `recur`
   - [ ] `import`

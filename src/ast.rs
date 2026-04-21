@@ -5,6 +5,8 @@ use itertools::Itertools;
 use slotmap::DefaultKey;
 use strum::EnumDiscriminants;
 
+use crate::run::Error;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token {
   pub kind: TokenKind,
@@ -216,6 +218,7 @@ pub enum ExprKind<'a> {
   String(String),
   Keyword(Cow<'a, str>),
   Symbol(Cow<'a, str>),
+  Error(Error),
 
   Float(f64),
   Integer(i64),
@@ -239,9 +242,12 @@ impl<'a> ExprKind<'a> {
       ExprKind::String(s) => ExprKind::String(s),
       ExprKind::Keyword(k) => ExprKind::Keyword(Cow::Owned(k.into_owned())),
       ExprKind::Symbol(s) => ExprKind::Symbol(Cow::Owned(s.into_owned())),
+      ExprKind::Error(e) => ExprKind::Error(e),
+
       ExprKind::Float(f) => ExprKind::Float(f),
       ExprKind::Integer(i) => ExprKind::Integer(i),
       ExprKind::Boolean(b) => ExprKind::Boolean(b),
+
       ExprKind::List(list) => {
         let items = Arc::try_unwrap(list).unwrap_or_else(|arc| (*arc).clone());
         ExprKind::List(Arc::new(
@@ -302,6 +308,7 @@ impl<'a> ExprKind<'a> {
       ExprKind::String(..) => "string",
       ExprKind::Keyword(..) => "keyword",
       ExprKind::Symbol(..) => "symbol",
+      ExprKind::Error(..) => "error",
       ExprKind::Float(..) => "float",
       ExprKind::Integer(..) => "integer",
       ExprKind::Boolean(..) => "boolean",
@@ -320,6 +327,7 @@ impl<'a> core::fmt::Display for ExprKind<'a> {
       ExprKind::String(string) => write!(f, "{}", string),
       ExprKind::Keyword(keyword) => write!(f, ":{}", keyword),
       ExprKind::Symbol(symbol) => write!(f, "{}", symbol),
+      ExprKind::Error(error) => write!(f, "Error({})", error),
       ExprKind::Float(float) => write!(f, "{}", float),
       ExprKind::Integer(integer) => write!(f, "{}", integer),
       ExprKind::List(exprs) => {
@@ -348,6 +356,7 @@ impl<'a> PartialEq for ExprKind<'a> {
       (Self::String(lhs), Self::String(rhs)) => lhs == rhs,
       (Self::Keyword(lhs), Self::Keyword(rhs)) => lhs == rhs,
       (Self::Symbol(lhs), Self::Symbol(rhs)) => lhs == rhs,
+      (Self::Error(lhs), Self::Error(rhs)) => lhs == rhs,
 
       (Self::Float(lhs), Self::Float(rhs)) => lhs == rhs,
       (Self::Integer(lhs), Self::Integer(rhs)) => lhs == rhs,
@@ -389,6 +398,9 @@ impl<'a> PartialOrd for ExprKind<'a> {
         lhs.eq(rhs).then_some(Ordering::Equal)
       }
       (Self::Symbol(lhs), Self::Symbol(rhs)) => {
+        lhs.eq(rhs).then_some(Ordering::Equal)
+      }
+      (Self::Error(lhs), Self::Error(rhs)) => {
         lhs.eq(rhs).then_some(Ordering::Equal)
       }
 

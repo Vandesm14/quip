@@ -7,7 +7,7 @@ use crate::{
   context::Context,
 };
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum Error {
   #[error("{0}")]
   CallError(#[from] CallError),
@@ -21,14 +21,14 @@ impl From<String> for Error {
   }
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 #[error("call error on '{symbol}': {kind:?}")]
 pub struct CallError {
   symbol: String,
   kind: CallErrorKind,
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum CallErrorKind {
   #[error(
     "incorrect arity: expected {expected} arguments, received {received} arguments"
@@ -115,39 +115,6 @@ impl<'a> Runtime<'a> {
     {
       let symbol = sym.to_string();
       match symbol.as_str() {
-        "lazy" => {
-          // (lazy val)
-          let Some(inner) = list.get(1) else {
-            return Err(Error::Message("lazy: expected a value".to_string()));
-          };
-          Ok(inner.clone())
-        }
-
-        "eval" => {
-          // (eval val)
-          // Evaluates val.
-          let Some(inner) = list.get(1) else {
-            return Err(Error::Message("eval: expected a value".to_string()));
-          };
-          let result = self.eval_expr(inner)?;
-          self.eval_expr(&result)
-        }
-
-        "force" => {
-          // (force val)
-          // Evaluates val and if the result is a function, calls it.
-          let Some(inner) = list.get(1) else {
-            return Err(Error::Message("force: expected a value".to_string()));
-          };
-          let val = self.eval_expr(inner)?;
-          let val = self.eval_expr(&val)?;
-          if let ExprKind::Function { params, body, env } = val.kind {
-            self.call(env, params, body, &[], "force")
-          } else {
-            Ok(val)
-          }
-        }
-
         "fn" => {
           // (fn (params...) body...)
           let Some(params_expr) = list.get(1) else {
@@ -553,7 +520,7 @@ impl<'a> Runtime<'a> {
             })
           } else {
             Err(Error::CallError(CallError {
-              symbol: "or".to_owned(),
+              symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
@@ -668,8 +635,87 @@ impl<'a> Runtime<'a> {
                 expected: 1,
                 received: 0,
               },
+            }));
+          };
+          let val = self.eval_expr(inner)?;
+          let val = self.eval_expr(&val)?;
+          if let ExprKind::Function { params, body, env } = val.kind {
+            self.call(env, params, body, &[], "force")
+          } else {
+            Ok(val)
+          }
+        }
+
+        "try" => {
+          // Evaluates and returns an error if the process fails.
+          let Some(inner) = list.get(1) else {
+            return Err(Error::CallError(CallError {
+              symbol,
+              kind: CallErrorKind::IncorrectArity {
+                expected: 1,
+                received: 0,
+              },
+            }));
+          };
+          match self.eval_expr(inner) {
+            Ok(result) => Ok(result),
+            Err(err) => Ok(Expr {
+              kind: ExprKind::Error(err.to_string().into()),
+            }),
+          }
+        }
+
+        "error" => {
+          let Some(inner) = list.get(1) else {
+            return Err(Error::CallError(CallError {
+              symbol,
+              kind: CallErrorKind::IncorrectArity {
+                expected: 1,
+                received: 0,
+              },
+            }));
+          };
+          Ok(Expr {
+            kind: ExprKind::Error(inner.to_string().into()),
+          })
+        }
+
+        "throw" => {
+          let Some(inner) = list.get(1) else {
+            return Err(Error::CallError(CallError {
+              symbol,
+              kind: CallErrorKind::IncorrectArity {
+                expected: 1,
+                received: 0,
+              },
+            }));
+          };
+          if let ExprKind::Error(ref err) = inner.kind {
+            Err(err.clone())
+          } else {
+            Err(Error::CallError(CallError {
+              symbol,
+              kind: CallErrorKind::TypeMismatch {
+                expected: vec!["integer".to_owned()],
+                received: vec![inner.kind.type_name().to_owned()],
+              },
             }))
           }
+        }
+
+        "to-string" => {
+          let Some(inner) = list.get(1) else {
+            return Err(Error::CallError(CallError {
+              symbol,
+              kind: CallErrorKind::IncorrectArity {
+                expected: 1,
+                received: 0,
+              },
+            }));
+          };
+          Ok(Expr {
+            kind: ExprKind::String(inner.to_string()),
+          })
         }
 
         "print" => {

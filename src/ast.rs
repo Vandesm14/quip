@@ -1,5 +1,5 @@
 use core::{cmp::Ordering, fmt, ops, ops::Range};
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use itertools::Itertools;
 use slotmap::DefaultKey;
@@ -222,7 +222,7 @@ pub enum ExprKind<'a> {
 
   Boolean(bool),
 
-  List(Vec<Expr<'a>>),
+  List(Arc<Vec<Expr<'a>>>),
   Map(HashMap<Cow<'a, str>, Expr<'a>>),
 
   Function {
@@ -243,7 +243,11 @@ impl<'a> ExprKind<'a> {
       ExprKind::Integer(i) => ExprKind::Integer(i),
       ExprKind::Boolean(b) => ExprKind::Boolean(b),
       ExprKind::List(list) => {
-        ExprKind::List(list.into_iter().map(Expr::into_owned).collect())
+        let items = Arc::try_unwrap(list)
+          .unwrap_or_else(|arc| (*arc).clone());
+        ExprKind::List(Arc::new(
+          items.into_iter().map(Expr::into_owned).collect(),
+        ))
       }
       ExprKind::Map(map) => ExprKind::Map(
         map
@@ -497,7 +501,7 @@ pub fn parse<'a>(
           && let Some(last) = stack.last_mut()
         {
           last.push(Expr {
-            kind: ExprKind::List(current),
+            kind: ExprKind::List(Arc::new(current)),
           });
         } else {
           return Err("unmatched '('".to_string());

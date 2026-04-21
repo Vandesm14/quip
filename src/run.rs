@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use slotmap::DefaultKey;
 
@@ -631,7 +631,7 @@ impl<'a> Runtime<'a> {
             .map(|expr| self.eval_expr(expr))
             .collect::<Result<Vec<_>, _>>()?;
           Ok(Expr {
-            kind: ExprKind::List(evaluated),
+            kind: ExprKind::List(Arc::new(evaluated)),
           })
         }
 
@@ -712,10 +712,10 @@ impl<'a> Runtime<'a> {
             ));
           }
           let idx = idx as usize;
-          let mut list_val = self.eval_expr(list_expr)?;
+          let list_val = self.eval_expr(list_expr)?;
           let new_val = self.eval_expr(val_expr)?;
           let list_type = list_val.kind.type_name().to_owned();
-          let ExprKind::List(ref mut items) = list_val.kind else {
+          let ExprKind::List(items) = list_val.kind else {
             return Err(Error::CallError(CallError {
               symbol: "set-nth".to_owned(),
               kind: CallErrorKind::TypeMismatch {
@@ -730,8 +730,11 @@ impl<'a> Runtime<'a> {
               idx
             )));
           }
-          items[idx] = new_val;
-          Ok(list_val)
+          let mut new_items = (*items).clone();
+          new_items[idx] = new_val;
+          Ok(Expr {
+            kind: ExprKind::List(Arc::new(new_items)),
+          })
         }
 
         "push" => {
@@ -744,10 +747,10 @@ impl<'a> Runtime<'a> {
               },
             }));
           };
-          let mut list_val = self.eval_expr(list_expr)?;
+          let list_val = self.eval_expr(list_expr)?;
           let new_val = self.eval_expr(val_expr)?;
           let list_type = list_val.kind.type_name().to_owned();
-          let ExprKind::List(ref mut items) = list_val.kind else {
+          let ExprKind::List(items) = list_val.kind else {
             return Err(Error::CallError(CallError {
               symbol: "push".to_owned(),
               kind: CallErrorKind::TypeMismatch {
@@ -756,8 +759,11 @@ impl<'a> Runtime<'a> {
               },
             }));
           };
-          items.push(new_val);
-          Ok(list_val)
+          let mut new_items = (*items).clone();
+          new_items.push(new_val);
+          Ok(Expr {
+            kind: ExprKind::List(Arc::new(new_items)),
+          })
         }
 
         "pop" => {
@@ -770,9 +776,9 @@ impl<'a> Runtime<'a> {
               },
             }));
           };
-          let mut list_val = self.eval_expr(list_expr)?;
+          let list_val = self.eval_expr(list_expr)?;
           let list_type = list_val.kind.type_name().to_owned();
-          let ExprKind::List(ref mut items) = list_val.kind else {
+          let ExprKind::List(items) = list_val.kind else {
             return Err(Error::CallError(CallError {
               symbol: "pop".to_owned(),
               kind: CallErrorKind::TypeMismatch {
@@ -786,8 +792,10 @@ impl<'a> Runtime<'a> {
               "'pop' requires a non-empty list".to_string(),
             ));
           }
-          items.pop();
-          Ok(list_val)
+          let new_items = items[..items.len() - 1].to_vec();
+          Ok(Expr {
+            kind: ExprKind::List(Arc::new(new_items)),
+          })
         }
 
         _ => {
@@ -1644,7 +1652,7 @@ mod tests {
       #[test]
       fn list_with_no_arguments() {
         let result = run("(list)").unwrap();
-        assert_eq!(result.kind, ExprKind::List(vec![]));
+        assert_eq!(result.kind, ExprKind::List(Arc::new(vec![])));
       }
 
       #[test]

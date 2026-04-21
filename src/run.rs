@@ -675,8 +675,9 @@ impl<'a> Runtime<'a> {
               },
             }));
           };
+          let inner = self.eval_expr(inner)?;
           Ok(Expr {
-            kind: ExprKind::Error(inner.to_string().into()),
+            kind: ExprKind::Error(Error::Message(inner.to_string())),
           })
         }
 
@@ -690,13 +691,14 @@ impl<'a> Runtime<'a> {
               },
             }));
           };
+          let inner = self.eval_expr(inner)?;
           if let ExprKind::Error(ref err) = inner.kind {
             Err(err.clone())
           } else {
             Err(Error::CallError(CallError {
               symbol,
               kind: CallErrorKind::TypeMismatch {
-                expected: vec!["integer".to_owned()],
+                expected: vec!["error".to_owned()],
                 received: vec![inner.kind.type_name().to_owned()],
               },
             }))

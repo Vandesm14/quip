@@ -19,16 +19,16 @@ In development, see below for details.
 By default, symbols will automatically evaluate to their underlying values at runtime.
 
 ```clojure
-(def 'a 1) ;; "'a" is marked as a raw symbol
-(def 'b 2) ;; "'b" is also marked as a raw symbol
+(def a 1)
+(def b 2)
 
-(print a)  ;; -> 1
-(print 'a) ;; -> a
+(print a)        ;; -> 1
+(print (lazy a)) ;; -> a
 
-(print [a b])   ;; -> [1 2]
-(print ['a b])  ;; -> [a 2]
-(print ['a 'b]) ;; -> [a b]
-(print '[a b])  ;; -> [a b]
+(print (list a b))               ;; -> (1 2)
+(print (list (lazy a) b))        ;; -> (a 2)
+(print (list (lazy a) (lazy b))) ;; -> (a b)
+(print (lazy (list a b)))        ;; -> (list a b)
 ```
 
 ## Functions
@@ -36,11 +36,10 @@ By default, symbols will automatically evaluate to their underlying values at ru
 Functions can be defined.
 
 ```clojure
-(defn 'add '[a b] '(print a) '(print b) '(+ 2 2))
-(def 'add (fn '[a b] '(print a) '(print b) '(+ 2 2)))
+(defn add (a b) (+ 2 2))
+(def add (fn (a b) (+ 2 2)))
 
-(print add)       ;; -> (Function [a b] (+ a b))
-(print (add 2 2)) ;; -> 4
+(print (add 2 2))  ;; -> 4
 ```
 
 <!--### Scopes

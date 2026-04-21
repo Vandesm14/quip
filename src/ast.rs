@@ -243,8 +243,7 @@ impl<'a> ExprKind<'a> {
       ExprKind::Integer(i) => ExprKind::Integer(i),
       ExprKind::Boolean(b) => ExprKind::Boolean(b),
       ExprKind::List(list) => {
-        let items = Arc::try_unwrap(list)
-          .unwrap_or_else(|arc| (*arc).clone());
+        let items = Arc::try_unwrap(list).unwrap_or_else(|arc| (*arc).clone());
         ExprKind::List(Arc::new(
           items.into_iter().map(Expr::into_owned).collect(),
         ))

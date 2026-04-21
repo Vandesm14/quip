@@ -123,6 +123,16 @@ impl<'a> Runtime<'a> {
           Ok(inner.clone())
         }
 
+        "eval" => {
+          // (eval val)
+          // Evaluates val.
+          let Some(inner) = list.get(1) else {
+            return Err(Error::Message("eval: expected a value".to_string()));
+          };
+          let result = self.eval_expr(inner)?;
+          self.eval_expr(&result)
+        }
+
         "force" => {
           // (force val)
           // Evaluates val and if the result is a function, calls it.
@@ -130,6 +140,7 @@ impl<'a> Runtime<'a> {
             return Err(Error::Message("force: expected a value".to_string()));
           };
           let val = self.eval_expr(inner)?;
+          let val = self.eval_expr(&val)?;
           if let ExprKind::Function { params, body, env } = val.kind {
             self.call(env, params, body, &[], "force")
           } else {
@@ -2107,12 +2118,37 @@ mod tests {
     }
 
     #[test]
-    fn force_lazy_value_returns_unevaluated_list() {
-      let result = run("(def t (lazy (fn () 7))) (force t)").unwrap();
-      let ExprKind::List(items) = result.kind else {
-        panic!("expected list");
-      };
-      assert_eq!(items[0].kind, ExprKind::Symbol("fn".into()));
+    fn force_fn_from_var() {
+      let result = run("(def t (fn () 1)) (force t)").unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(1));
+    }
+
+    #[test]
+    fn force_expr_from_var() {
+      let result = run("(def t (lazy (+ 1 2))) (force t)").unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(3));
+    }
+
+    #[test]
+    fn force_lazy_expr() {
+      let result = run("(force (lazy (+ 1 2)))").unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(3));
+    }
+
+    #[test]
+    fn force_double_fn() {
+      let result =
+        run("(def a 0) (force (fn () (set a 1) (fn () (set a 2)))) a").unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(1));
+    }
+
+    #[test]
+    fn force_double_fn_from_var() {
+      let result = run(
+        "(def a 0) (def t (fn () (set a 1) (fn () (set a 2)))) (force t) a",
+      )
+      .unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(1));
     }
 
     #[test]

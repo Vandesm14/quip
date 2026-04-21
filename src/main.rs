@@ -78,7 +78,8 @@ fn run_repl() {
 
         match parse(&line, tokens) {
           Ok(exprs) => {
-            let exprs: Vec<_> = exprs.into_iter().map(|e| e.into_owned()).collect();
+            let exprs: Vec<_> =
+              exprs.into_iter().map(|e| e.into_owned()).collect();
             for expr in &exprs {
               match runtime.eval_expr(expr) {
                 Ok(result) => println!("{result}"),

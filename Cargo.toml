@@ -6,3 +6,13 @@ members = ["quip-cli", "quip-core"]
 itertools = "0.14.0"
 slotmap = "1.1.1"
 thiserror = "2.0.18"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+hmac = "0.13.0"
+chrono = "0.4.44"
+sha2 = "0.11.0"
+uuid = "1.23.1"
+bytes = "1.11.1"
+tokio = { version = "1.52.1", features = ["full"] }
+zeromq = "0.5.0"
+hex = "0.4.3"

@@ -1,4 +1,10 @@
 use std::rc::Rc;
+use std::{
+  borrow::Cow,
+  sync::{Arc, Mutex},
+};
+
+use slotmap::DefaultKey;
 
 use crate::{
   ast::{Expr, ExprKind, Span},
@@ -105,11 +111,37 @@ pub enum CallErrorKind {
   UncallableForm,
 }
 
+/// Sink for `(print ...)` output.
+///
+/// `Stdout` preserves the original CLI REPL behavior. `Buffered` captures lines
+/// in a shared buffer so the Jupyter kernel can flush them as `stream` messages
+/// on iopub after each request completes.
+#[derive(Debug, Clone, Default)]
+pub enum Output {
+  #[default]
+  Stdout,
+  Buffered(Arc<Mutex<Vec<String>>>),
+}
+
+impl Output {
+  pub fn write_line(&self, line: &str) {
+    match self {
+      Output::Stdout => println!("{}", line),
+      Output::Buffered(buf) => {
+        if let Ok(mut guard) = buf.lock() {
+          guard.push(line.to_string());
+        }
+      }
+    }
+  }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Runtime {
   pub context: Context,
   pub recur: Option<Vec<Expr>>,
   pub call_stack: Vec<CallFrame>,
+  pub output: Output,
 }
 
 impl Runtime {

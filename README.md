@@ -1,4 +1,6 @@
-# Quip - Spec
+# Quip
+
+In development, see below for details.
 
 ## Purpose
 

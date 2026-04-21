@@ -745,6 +745,22 @@ impl<'a> Runtime<'a> {
           }
         }
 
+        "dbg" => {
+          if let Some(expr) = list.get(1) {
+            let val = self.eval_expr(expr)?;
+            println!("{:?}", val);
+            Ok(val)
+          } else {
+            Err(Error::CallError(CallError {
+              symbol,
+              kind: CallErrorKind::IncorrectArity {
+                expected: 1,
+                received: 0,
+              },
+            }))
+          }
+        }
+
         "list" => {
           let args = list.get(1..).unwrap_or(&[]);
           let evaluated = args

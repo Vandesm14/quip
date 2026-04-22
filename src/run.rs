@@ -138,7 +138,6 @@ impl Runtime {
       })));
     }
 
-    self.recur = Some(call_args);
     let mut result = Expr {
       kind: ExprKind::Nil,
       span: None,
@@ -151,15 +150,25 @@ impl Runtime {
       recurs: 0,
     });
 
+    let mut bound = Vec::new();
+    for (param, arg_expr) in params.iter().zip(call_args.iter()) {
+      let val = self.eval_expr(arg_expr)?;
+      bound.push((param.clone(), val));
+    }
+
+    let saved = self.context.push_scope(env);
+
+    self.recur = Some(call_args);
+    let mut recurred = false;
     while let Some(args) = self.recur.take() {
-      let mut bound = Vec::new();
-      for (param, arg_expr) in params.iter().zip(args.iter()) {
-        let val = self.eval_expr(arg_expr)?;
-        bound.push((param.clone(), val));
+      if recurred {
+        for (param, arg_expr) in params.iter().zip(args.iter()) {
+          let val = self.eval_expr(arg_expr)?;
+          bound.push((param.clone(), val));
+        }
       }
 
-      let saved = self.context.push_scope(env);
-      for (param_name, val) in bound {
+      for (param_name, val) in bound.drain(..) {
         self.context.define(param_name, val);
       }
       for body_expr in body {
@@ -172,10 +181,11 @@ impl Runtime {
         };
       }
 
-      self.context.restore_scope(saved);
       self.call_stack[call_frame_index].recurs += 1;
+      recurred = true;
     }
 
+    self.context.restore_scope(saved);
     assert!(self.call_stack.pop().is_some());
 
     Ok(result)

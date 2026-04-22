@@ -1,5 +1,6 @@
 use std::{borrow::Cow, sync::Arc};
 
+use itertools::Itertools;
 use slotmap::DefaultKey;
 
 use crate::{
@@ -44,6 +45,7 @@ pub enum CallErrorKind {
 #[derive(Debug, Clone, Default)]
 pub struct Runtime<'a> {
   pub context: Context<'a>,
+  pub recur: Option<Vec<Expr<'a>>>,
 }
 
 impl<'a> Runtime<'a> {
@@ -52,7 +54,7 @@ impl<'a> Runtime<'a> {
     closure_env: DefaultKey,
     params: Vec<Cow<'a, str>>,
     body: Vec<Expr<'a>>,
-    call_args: &[Expr<'a>],
+    call_args: Vec<Expr<'a>>,
     name: &str,
   ) -> Result<Expr<'a>, Error> {
     if call_args.len() != params.len() {
@@ -65,31 +67,35 @@ impl<'a> Runtime<'a> {
       }));
     }
 
-    let mut bound = Vec::new();
-    for (param, arg_expr) in params.iter().zip(call_args.iter()) {
-      let val = self.eval_expr(arg_expr)?;
-      bound.push((param.clone(), val));
-    }
-
-    let saved = self.context.push_scope(closure_env);
-    for (param_name, val) in bound {
-      self.context.define(param_name, val);
-    }
-
+    self.recur = Some(call_args);
     let mut result = Expr {
       kind: ExprKind::Nil,
     };
-    for body_expr in &body {
-      result = match self.eval_expr(body_expr) {
-        Ok(v) => v,
-        Err(e) => {
-          self.context.restore_scope(saved);
-          return Err(e);
-        }
-      };
+
+    while let Some(args) = core::mem::take(&mut self.recur) {
+      let mut bound = Vec::new();
+      for (param, arg_expr) in params.iter().zip(args.iter()) {
+        let val = self.eval_expr(arg_expr)?;
+        bound.push((param.clone(), val));
+      }
+
+      let saved = self.context.push_scope(closure_env);
+      for (param_name, val) in bound {
+        self.context.define(param_name, val);
+      }
+      for body_expr in &body {
+        result = match self.eval_expr(body_expr) {
+          Ok(v) => v,
+          Err(e) => {
+            self.context.restore_scope(saved);
+            return Err(e);
+          }
+        };
+      }
+
+      self.context.restore_scope(saved);
     }
 
-    self.context.restore_scope(saved);
     Ok(result)
   }
 
@@ -642,11 +648,49 @@ impl<'a> Runtime<'a> {
               env,
               params,
               body,
-              list.get(2..).unwrap_or_default(),
+              list.get(2..).unwrap_or_default().to_vec(),
               &format!("(call {})", inner),
             )
           } else {
             Ok(val)
+          }
+        }
+
+        "recur" => {
+          self.recur = Some(list.get(1..).unwrap_or_default().to_vec());
+          Ok(Expr {
+            kind: ExprKind::Nil,
+          })
+        }
+
+        "if" => {
+          let Some([cond_expr, body_expr]) = list.get(1..3) else {
+            return Err(Error::CallError(CallError {
+              symbol,
+              kind: CallErrorKind::IncorrectArity {
+                expected: 2,
+                received: list.len() - 1,
+              },
+            }));
+          };
+          let cond = self.eval_expr(cond_expr)?;
+          if let ExprKind::Boolean(true) = cond.kind {
+            let body = self.eval_expr(body_expr)?;
+            if let ExprKind::Function { params, body, env } = body.kind {
+              self.call(
+                env,
+                params,
+                body,
+                Vec::new(),
+                &format!("(if {} {})", cond_expr, body_expr),
+              )
+            } else {
+              Ok(body)
+            }
+          } else {
+            Ok(Expr {
+              kind: ExprKind::Nil,
+            })
           }
         }
 
@@ -943,7 +987,7 @@ impl<'a> Runtime<'a> {
             })?;
           if let ExprKind::Function { params, body, env } = val.kind {
             let call_args = list.get(1..).unwrap_or(&[]);
-            self.call(env, params, body, call_args, symbol.as_ref())
+            self.call(env, params, body, call_args.to_vec(), symbol.as_ref())
           } else {
             Err(Error::Message(format!("'{}' is not a function", symbol)))
           }
@@ -2413,6 +2457,7 @@ mod tests {
     fn gc_should_not_trigger_below_threshold() {
       let mut runtime: Runtime<'static> = Runtime {
         context: Context::new(10),
+        ..Default::default()
       };
       assert!(!runtime.context.should_gc());
 
@@ -2424,6 +2469,7 @@ mod tests {
     fn gc_should_trigger_at_or_above_threshold() {
       let mut runtime: Runtime<'static> = Runtime {
         context: Context::new(3),
+        ..Default::default()
       };
       assert!(!runtime.context.should_gc());
 

@@ -135,6 +135,7 @@ impl Runtime {
       span: None,
     };
 
+    let call_frame_index = self.call_stack.len();
     self.call_stack.push(CallFrame {
       expr: expr.clone(),
       call_site: expr.span,
@@ -163,10 +164,10 @@ impl Runtime {
       }
 
       self.context.restore_scope(saved);
-
-      let call_frame = self.call_stack.last_mut().unwrap();
-      call_frame.recurs += 1;
+      self.call_stack[call_frame_index].recurs += 1;
     }
+
+    assert!(self.call_stack.pop().is_some());
 
     Ok(result)
   }
@@ -202,7 +203,9 @@ impl Runtime {
           call_site: expr.span,
           recurs: 0,
         });
-        return (intrinsic.handler)(self, args);
+        let result = (intrinsic.handler)(self, args);
+        assert!(self.call_stack.pop().is_some());
+        return result;
       }
 
       match symbol.as_str() {

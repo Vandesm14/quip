@@ -20,15 +20,26 @@ impl fmt::Display for Token {
 }
 
 impl Token {
-  pub const fn new(kind: TokenKind, start: usize, end: usize) -> Self {
+  pub const fn new(
+    kind: TokenKind,
+    start: usize,
+    end: usize,
+    line: u32,
+    column: u32,
+  ) -> Self {
     Self {
       kind,
-      span: Span::new(start, end),
+      span: Span::new(start, end, line, column),
     }
   }
 
-  pub const fn begin(kind: TokenKind, start: usize) -> Self {
-    Self::new(kind, start, start)
+  pub const fn begin(
+    kind: TokenKind,
+    start: usize,
+    line: u32,
+    column: u32,
+  ) -> Self {
+    Self::new(kind, start, start, line, column)
   }
 
   pub const fn end(mut self, end: usize) -> Self {
@@ -43,11 +54,18 @@ pub struct Span {
   pub start: usize,
   /// The upper byte bound (exclusive).
   pub end: usize,
+  pub line: u32,
+  pub column: u32,
 }
 
 impl Span {
-  pub const fn new(start: usize, end: usize) -> Self {
-    Self { start, end }
+  pub const fn new(start: usize, end: usize, line: u32, column: u32) -> Self {
+    Self {
+      start,
+      end,
+      line,
+      column,
+    }
   }
 
   /// Returns the <code>[Range]\<[usize]\></code> of this [`Span`].
@@ -109,7 +127,17 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
   // This applies to strings and everything else.
   let mut tokens: Vec<Token> = Vec::new();
   let mut current: Option<Token> = None;
+  let mut line = 1;
+  let mut column = 1;
+
   for (i, char) in source.char_indices() {
+    if char == '\n' {
+      line += 1;
+      column = 1;
+    } else {
+      column += 1;
+    }
+
     if let Some(ref mut token) = current {
       match token.kind {
         TokenKind::Integer => {
@@ -154,29 +182,29 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
 
     if current.is_none() {
       if char == ';' && source.chars().nth(i + 1) == Some(';') {
-        current = Some(Token::begin(TokenKind::Comment, i + 1));
+        current = Some(Token::begin(TokenKind::Comment, i + 1, line, column));
       } else if char == '"' {
-        current = Some(Token::begin(TokenKind::String, i + 1));
+        current = Some(Token::begin(TokenKind::String, i + 1, line, column));
       } else if char.is_ascii_digit() {
-        current = Some(Token::begin(TokenKind::Integer, i));
+        current = Some(Token::begin(TokenKind::Integer, i, line, column));
       } else if char == '-' {
         // Lookahead to determine if this is a negative number or a symbol.
         let next_char = source.chars().nth(i + 1);
         if matches!(next_char, Some(c) if c.is_ascii_digit()) {
-          current = Some(Token::begin(TokenKind::Integer, i));
+          current = Some(Token::begin(TokenKind::Integer, i, line, column));
         } else {
-          current = Some(Token::begin(TokenKind::Symbol, i));
+          current = Some(Token::begin(TokenKind::Symbol, i, line, column));
         }
       } else if char == '(' {
-        tokens.push(Token::new(TokenKind::LeftParen, i, i + 1));
+        tokens.push(Token::new(TokenKind::LeftParen, i, i + 1, line, column));
       } else if char == ')' {
-        tokens.push(Token::new(TokenKind::RightParen, i, i + 1));
+        tokens.push(Token::new(TokenKind::RightParen, i, i + 1, line, column));
       } else if char == ':' {
-        current = Some(Token::begin(TokenKind::Keyword, i + 1));
+        current = Some(Token::begin(TokenKind::Keyword, i + 1, line, column));
       } else if char.is_alphabetic() || SYMBOL_CHARS.contains(&char) {
-        current = Some(Token::begin(TokenKind::Symbol, i));
+        current = Some(Token::begin(TokenKind::Symbol, i, line, column));
       } else if !char.is_whitespace() {
-        tokens.push(Token::new(TokenKind::Invalid, i, i + 1));
+        tokens.push(Token::new(TokenKind::Invalid, i, i + 1, line, column));
       }
     }
   }
@@ -191,6 +219,7 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expr<'a> {
   pub kind: ExprKind<'a>,
+  pub span: Option<Span>,
 }
 
 impl<'a> core::fmt::Display for Expr<'a> {
@@ -205,6 +234,7 @@ impl<'a> Expr<'a> {
   pub fn into_owned(self) -> Expr<'static> {
     Expr {
       kind: self.kind.into_owned(),
+      span: self.span,
     }
   }
 }
@@ -494,6 +524,8 @@ pub fn parse<'a>(
   tokens: Vec<Token>,
 ) -> Result<Vec<Expr<'a>>, String> {
   let mut stack: Vec<Vec<Expr>> = vec![Vec::new()];
+  let mut spans = vec![];
+
   for token in tokens.into_iter() {
     let span = source
       .get(token.span.to_range())
@@ -505,14 +537,23 @@ pub fn parse<'a>(
 
       TokenKind::LeftParen => {
         stack.push(Vec::new());
+        spans.push(token.span);
       }
       TokenKind::RightParen => {
         let current = stack.pop();
+        let start_span = spans.pop().unwrap();
+
         if let Some(current) = current
           && let Some(last) = stack.last_mut()
         {
           last.push(Expr {
             kind: ExprKind::List(Arc::new(current)),
+            span: Some(Span {
+              start: start_span.start,
+              end: token.span.end,
+              line: start_span.line,
+              column: start_span.column,
+            }),
           });
         } else {
           return Err("unmatched '('".to_string());
@@ -526,6 +567,7 @@ pub fn parse<'a>(
         if let Some(last) = stack.last_mut() {
           last.push(Expr {
             kind: ExprKind::Integer(parsed),
+            span: Some(token.span),
           });
         }
       }
@@ -536,6 +578,7 @@ pub fn parse<'a>(
         if let Some(last) = stack.last_mut() {
           last.push(Expr {
             kind: ExprKind::Float(parsed),
+            span: Some(token.span),
           });
         }
       }
@@ -544,6 +587,11 @@ pub fn parse<'a>(
         if let Some(last) = stack.last_mut() {
           last.push(Expr {
             kind: ExprKind::String(span.to_string()),
+            span: Some(Span {
+              start: token.span.start - 1,
+              end: token.span.end + 1,
+              ..token.span
+            }),
           });
         }
       }
@@ -552,18 +600,22 @@ pub fn parse<'a>(
           if span == "nil" {
             last.push(Expr {
               kind: ExprKind::Nil,
+              span: Some(token.span),
             });
           } else if span == "true" {
             last.push(Expr {
               kind: ExprKind::Boolean(true),
+              span: Some(token.span),
             });
           } else if span == "false" {
             last.push(Expr {
               kind: ExprKind::Boolean(false),
+              span: Some(token.span),
             });
           } else {
             last.push(Expr {
               kind: ExprKind::Symbol(Cow::from(span)),
+              span: Some(token.span),
             });
           }
         }
@@ -572,10 +624,12 @@ pub fn parse<'a>(
         if let Some(last) = stack.last_mut() {
           last.push(Expr {
             kind: ExprKind::Keyword(Cow::from(span)),
+            span: Some(token.span),
           });
         }
       }
 
+      // TODO(leonskij): It would nice to include comments in debug information.
       TokenKind::Comment => {}
     }
   }

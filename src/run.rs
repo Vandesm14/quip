@@ -1,6 +1,5 @@
 use std::{borrow::Cow, sync::Arc};
 
-use itertools::Itertools;
 use slotmap::DefaultKey;
 
 use crate::{

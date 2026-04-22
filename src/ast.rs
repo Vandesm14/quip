@@ -3,7 +3,6 @@ use std::{collections::HashMap, rc::Rc};
 
 use itertools::Itertools;
 use slotmap::DefaultKey;
-use strum::EnumDiscriminants;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token {
@@ -233,8 +232,7 @@ impl core::fmt::Display for Expr {
   }
 }
 
-#[derive(Debug, Clone, Default, EnumDiscriminants)]
-#[strum_discriminants(name(ExprKindVariants))]
+#[derive(Debug, Clone, Default)]
 pub enum ExprKind {
   #[default]
   Nil,

@@ -1755,6 +1755,48 @@ mod tests {
     }
   }
 
+  mod lazy_parsing {
+    use super::*;
+
+    #[test]
+    fn test_lazy_symbols() {
+      let result = run("'abc").unwrap();
+      assert_eq!(result.kind, ExprKind::Symbol("abc".into()));
+    }
+
+    #[test]
+    fn test_lazy_lists() {
+      let result = run("'(+ 1 2)").unwrap();
+      if let ExprKind::List(items) = result.kind {
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0].kind, ExprKind::Symbol("+".into()));
+        assert_eq!(items[1].kind, ExprKind::Integer(1));
+        assert_eq!(items[2].kind, ExprKind::Integer(2));
+      } else {
+        panic!("Expected list");
+      };
+    }
+
+    #[test]
+    fn test_lazy_list_itemss() {
+      let result = run("(list '+ 1 2)").unwrap();
+      if let ExprKind::List(items) = result.kind {
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0].kind, ExprKind::Symbol("+".into()));
+        assert_eq!(items[1].kind, ExprKind::Integer(1));
+        assert_eq!(items[2].kind, ExprKind::Integer(2));
+      } else {
+        panic!("Expected list");
+      };
+    }
+
+    #[test]
+    fn test_lazy_and_lazy_fn() {
+      let result = run("(= 'a (lazy a))").unwrap();
+      assert_eq!(result.kind, ExprKind::Boolean(true));
+    }
+  }
+
   mod scopes {
     use super::*;
 

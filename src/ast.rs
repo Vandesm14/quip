@@ -84,6 +84,8 @@ pub enum TokenKind {
   LeftParen,
   RightParen,
 
+  Lazy,
+
   Integer,
   Float,
   String,
@@ -107,6 +109,8 @@ impl fmt::Display for TokenKind {
       Self::String => write!(f, "a string literal"),
       Self::Symbol => write!(f, "a symbol literal"),
       Self::Keyword => write!(f, "a keyword literal"),
+
+      Self::Lazy => write!(f, "'"),
 
       Self::Comment => write!(f, "a comment"),
     }
@@ -175,11 +179,14 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
         TokenKind::Eof => unimplemented!("should never be EOF"),
         TokenKind::LeftParen => unreachable!("parens are single chars"),
         TokenKind::RightParen => unreachable!("parens are single chars"),
+        TokenKind::Lazy => unreachable!("lazy is a single char"),
       }
     }
 
     if current.is_none() {
-      if char == ';' && source.chars().nth(i + 1) == Some(';') {
+      if char == '\'' {
+        tokens.push(Token::new(TokenKind::Lazy, i, i + 1, line, column));
+      } else if char == ';' && source.chars().nth(i + 1) == Some(';') {
         current = Some(Token::begin(TokenKind::Comment, i + 1, line, column));
       } else if char == '"' {
         current = Some(Token::begin(TokenKind::String, i + 1, line, column));
@@ -474,6 +481,19 @@ impl ops::Rem for ExprKind {
 pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
   let mut stack: Vec<Vec<Expr>> = vec![Vec::new()];
   let mut spans = vec![];
+  // Whether the next expr should be lazy. (<span of the lazy `'`> <applies to list>).
+  let mut lazy_span: Option<(Span, bool)> = None;
+
+  let make_lazy = |expr: Expr, span: Span| Expr {
+    kind: ExprKind::List(Rc::new(vec![
+      Expr {
+        kind: ExprKind::Symbol("lazy".into()),
+        span: Some(span),
+      },
+      expr,
+    ])),
+    span: Some(span),
+  };
 
   for token in tokens.into_iter() {
     let span = source
@@ -487,6 +507,10 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
       TokenKind::LeftParen => {
         stack.push(Vec::new());
         spans.push(token.span);
+
+        if let Some((_, ref mut is_list)) = lazy_span {
+          *is_list = true;
+        }
       }
       TokenKind::RightParen => {
         let current = stack.pop();
@@ -495,7 +519,7 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
         if let Some(current) = current
           && let Some(last) = stack.last_mut()
         {
-          last.push(Expr {
+          let expr = Expr {
             kind: ExprKind::List(Rc::new(current)),
             span: Some(Span {
               start: start_span.start,
@@ -503,10 +527,20 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
               line: start_span.line,
               column: start_span.column,
             }),
-          });
+          };
+          last.push(
+            lazy_span
+              .take()
+              .map(|(span, _)| make_lazy(expr.clone(), span))
+              .unwrap_or(expr),
+          );
         } else {
           return Err("unmatched '('".to_string());
         }
+      }
+
+      TokenKind::Lazy => {
+        lazy_span = Some((token.span, false));
       }
 
       TokenKind::Integer => {
@@ -562,10 +596,20 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
               span: Some(token.span),
             });
           } else {
-            last.push(Expr {
+            let expr = Expr {
               kind: ExprKind::Symbol(Rc::from(span)),
               span: Some(token.span),
-            });
+            };
+            last.push(
+              if let Some((span, is_list)) = lazy_span
+                && !is_list
+              {
+                lazy_span = None;
+                make_lazy(expr, span)
+              } else {
+                expr
+              },
+            );
           }
         }
       }

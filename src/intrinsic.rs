@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::ast::{Expr, ExprKind, lex, parse};
 use crate::run::{CallError, CallErrorKind, Error, ErrorReason, Runtime};
@@ -460,7 +460,7 @@ pub fn list_ops(map: &mut HashMap<&'static str, Intrinsic>) {
         .map(|expr| runtime.eval_expr(expr))
         .collect::<Result<Vec<_>, _>>()?;
       Ok(Expr {
-        kind: ExprKind::List(Rc::new(evaluated)),
+        kind: ExprKind::List(Arc::new(evaluated)),
         span: None,
       })
     },
@@ -570,7 +570,7 @@ pub fn list_ops(map: &mut HashMap<&'static str, Intrinsic>) {
       let mut new_items = (*items).clone();
       new_items[idx] = new_val;
       Ok(Expr {
-        kind: ExprKind::List(Rc::new(new_items)),
+        kind: ExprKind::List(Arc::new(new_items)),
         span: None,
       })
     },
@@ -596,7 +596,7 @@ pub fn list_ops(map: &mut HashMap<&'static str, Intrinsic>) {
       let mut new_items = (*items).clone();
       new_items.push(new_val);
       Ok(Expr {
-        kind: ExprKind::List(Rc::new(new_items)),
+        kind: ExprKind::List(Arc::new(new_items)),
         span: None,
       })
     },
@@ -626,7 +626,7 @@ pub fn list_ops(map: &mut HashMap<&'static str, Intrinsic>) {
 
       let new_items = items[..items.len() - 1].to_vec();
       Ok(Expr {
-        kind: ExprKind::List(Rc::new(new_items)),
+        kind: ExprKind::List(Arc::new(new_items)),
         span: None,
       })
     },
@@ -757,7 +757,7 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
       //     new_list.push(arg.clone());
       //   }
       //   runtime.eval_expr(&Expr {
-      //     kind: ExprKind::List(Rc::new(new_list)),
+      //     kind: ExprKind::List(Arc::new(new_list)),
       //     span: None,
       //   })
       } else {
@@ -823,7 +823,7 @@ pub fn error_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     handler: |_, args| {
       let inner = args[0].clone();
       Ok(Expr {
-        kind: ExprKind::Error(Rc::from(inner.to_string())),
+        kind: ExprKind::Error(Arc::from(inner.to_string())),
         span: None,
       })
     },

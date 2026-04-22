@@ -1,10 +1,4 @@
-use std::rc::Rc;
-use std::{
-  borrow::Cow,
-  sync::{Arc, Mutex},
-};
-
-use slotmap::DefaultKey;
+use std::sync::{Arc, Mutex};
 
 use crate::{
   ast::{Expr, ExprKind, Span},
@@ -228,7 +222,7 @@ impl Runtime {
   fn parse_params(
     param_list: &[Expr],
     ctx: &str,
-  ) -> Result<Vec<Rc<str>>, String> {
+  ) -> Result<Vec<Arc<str>>, String> {
     param_list
       .iter()
       .map(|p| {
@@ -1365,7 +1359,7 @@ mod tests {
       #[test]
       fn list_with_no_arguments() {
         let result = run("(list)").unwrap();
-        assert_eq!(result.kind, ExprKind::List(Rc::new(vec![])));
+        assert_eq!(result.kind, ExprKind::List(Arc::new(vec![])));
       }
 
       #[test]

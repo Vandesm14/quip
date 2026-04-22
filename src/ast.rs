@@ -1,5 +1,5 @@
 use core::{cmp::Ordering, fmt, ops, ops::Range};
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, sync::Arc};
 
 use itertools::Itertools;
 use slotmap::DefaultKey;
@@ -258,21 +258,21 @@ pub enum ExprKind {
   Nil,
 
   String(String),
-  Keyword(Rc<str>),
-  Symbol(Rc<str>),
-  Error(Rc<str>),
+  Keyword(Arc<str>),
+  Symbol(Arc<str>),
+  Error(Arc<str>),
 
   Float(f64),
   Integer(i64),
 
   Boolean(bool),
 
-  List(Rc<Vec<Expr>>),
-  Form(Rc<Vec<Expr>>),
-  Map(HashMap<Rc<str>, Expr>),
+  List(Arc<Vec<Expr>>),
+  Form(Arc<Vec<Expr>>),
+  Map(HashMap<Arc<str>, Expr>),
 
   Function {
-    params: Vec<Rc<str>>,
+    params: Vec<Arc<str>>,
     body: Vec<Expr>,
     env: DefaultKey,
   },
@@ -480,7 +480,7 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
   let make_lazy = |expr: Expr| {
     let span = expr.span.unwrap();
     Expr {
-      kind: ExprKind::Form(Rc::new(vec![
+      kind: ExprKind::Form(Arc::new(vec![
         Expr {
           kind: ExprKind::Symbol("lazy".into()),
           span: Some(span),
@@ -538,8 +538,8 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
             column: start_span.column,
           });
           let kind = match group {
-            Group::List => ExprKind::List(Rc::new(current)),
-            Group::Form => ExprKind::Form(Rc::new(current)),
+            Group::List => ExprKind::List(Arc::new(current)),
+            Group::Form => ExprKind::Form(Arc::new(current)),
           };
           let expr = Expr { kind, span };
 
@@ -615,7 +615,7 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
             });
           } else {
             let expr = Expr {
-              kind: ExprKind::Symbol(Rc::from(span)),
+              kind: ExprKind::Symbol(Arc::from(span)),
               span: Some(token.span),
             };
             if lazy_flag {
@@ -630,7 +630,7 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
       TokenKind::Keyword => {
         if let Some((last, _)) = stack.last_mut() {
           last.push(Expr {
-            kind: ExprKind::Keyword(Rc::from(span)),
+            kind: ExprKind::Keyword(Arc::from(span)),
             span: Some(token.span),
           });
         }

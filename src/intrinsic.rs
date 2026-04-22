@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::ast::Expr;
-use crate::run::{CallError, CallErrorKind, Error, Runtime};
+use crate::run::{CallError, CallErrorKind, Error, ErrorReason, Runtime};
 
 /// Type variant for parameter validation.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -49,16 +49,16 @@ pub struct Intrinsic {
   pub name: &'static str,
   pub params: &'static [Param],
   pub handler:
-    for<'a> fn(&mut Runtime<'a>, Vec<Expr<'a>>) -> Result<Expr<'a>, Error>,
+    fn(&mut Runtime, Vec<Expr>) -> Result<Expr, Error>,
 }
 
 impl Intrinsic {
-  pub fn check_params<'a>(
+  pub fn check_params(
     &self,
-    runtime: &mut Runtime<'a>,
-    list: &[Expr<'a>],
+    runtime: &mut Runtime,
+    list: &[Expr],
     symbol: &str,
-  ) -> Result<Vec<Expr<'a>>, Error> {
+  ) -> Result<Vec<Expr>, Error> {
     let args = list.get(1..).unwrap_or(&[]);
     let mut validated = Vec::new();
     let has_many = self
@@ -70,54 +70,54 @@ impl Intrinsic {
       match param {
         Param::One(kind) => {
           if i >= args.len() {
-            return Err(Error::CallError(CallError {
+            return Err(runtime.error(ErrorReason::CallError(CallError {
               symbol: symbol.to_owned(),
               kind: CallErrorKind::IncorrectArity {
                 expected: self.params.len(),
                 received: args.len(),
               },
-            }));
+            })));
           }
-          self.check_type(&args[i], *kind, symbol)?;
+          self.check_type(runtime, &args[i], *kind, symbol)?;
           validated.push(args[i].clone());
         }
         Param::EvalTo(kind) => {
           if i >= args.len() {
-            return Err(Error::CallError(CallError {
+            return Err(runtime.error(ErrorReason::CallError(CallError {
               symbol: symbol.to_owned(),
               kind: CallErrorKind::IncorrectArity {
                 expected: self.params.len(),
                 received: args.len(),
               },
-            }));
+            })));
           }
           let evaluated = runtime.eval_expr(&args[i])?;
-          self.check_type(&evaluated, *kind, symbol)?;
+          self.check_type(runtime, &evaluated, *kind, symbol)?;
           validated.push(evaluated);
         }
         Param::Many(kind) => {
           if i != self.params.len() - 1 {
-            return Err(Error::Message(format!(
+            return Err(runtime.error(ErrorReason::Message(format!(
               "'{}': Many must be the last parameter",
               symbol
-            )));
+            ))));
           }
           for (_j, arg) in args.iter().enumerate().skip(i) {
-            self.check_type(arg, *kind, symbol)?;
+            self.check_type(runtime, arg, *kind, symbol)?;
             validated.push(arg.clone());
           }
           break;
         }
         Param::ManyEvalTo(kind) => {
           if i != self.params.len() - 1 {
-            return Err(Error::Message(format!(
+            return Err(runtime.error(ErrorReason::Message(format!(
               "'{}': ManyEvalTo must be the last parameter",
               symbol
-            )));
+            ))));
           }
           for (_j, arg) in args.iter().enumerate().skip(i) {
             let evaluated = runtime.eval_expr(arg)?;
-            self.check_type(&evaluated, *kind, symbol)?;
+            self.check_type(runtime, &evaluated, *kind, symbol)?;
             validated.push(evaluated);
           }
           break;
@@ -127,13 +127,13 @@ impl Intrinsic {
 
     // Check for too many arguments (when no Many param)
     if !has_many && args.len() > self.params.len() {
-      return Err(Error::CallError(CallError {
+      return Err(runtime.error(ErrorReason::CallError(CallError {
         symbol: symbol.to_owned(),
         kind: CallErrorKind::IncorrectArity {
           expected: self.params.len(),
           received: args.len(),
         },
-      }));
+      })));
     }
 
     Ok(validated)
@@ -142,6 +142,7 @@ impl Intrinsic {
   /// Validate argument type against ExprKindVariant
   fn check_type(
     &self,
+    runtime: &mut Runtime,
     expr: &Expr,
     variant: ExprType,
     symbol: &str,
@@ -161,13 +162,13 @@ impl Intrinsic {
     };
 
     if !valid {
-      Err(Error::CallError(CallError {
+      Err(runtime.error(ErrorReason::CallError(CallError {
         symbol: symbol.to_owned(),
         kind: CallErrorKind::TypeMismatch {
           expected: vec![variant.to_string()],
           received: vec![expr.kind.type_name().to_owned()],
         },
-      }))
+      })))
     } else {
       Ok(())
     }
@@ -175,10 +176,10 @@ impl Intrinsic {
 }
 
 // Arithmetic
-pub fn intrinsic_add<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_add(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   let lhs = args[0].kind.clone();
   let rhs = args[1].kind.clone();
   let (lhs, rhs) = lhs.coerce_numeric(rhs);
@@ -187,14 +188,14 @@ pub fn intrinsic_add<'a>(
       kind: kind.normalize_numeric(),
       span: None,
     }),
-    Err(_) => Err(Error::Message("'+' requires numeric arguments".to_string())),
+    Err(_) => Err(runtime.error(ErrorReason::Message("'+' requires numeric arguments".to_string()))),
   }
 }
 
-pub fn intrinsic_sub<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_sub(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   let lhs = args[0].kind.clone();
   let rhs = args[1].kind.clone();
   let (lhs, rhs) = lhs.coerce_numeric(rhs);
@@ -203,14 +204,14 @@ pub fn intrinsic_sub<'a>(
       kind: kind.normalize_numeric(),
       span: None,
     }),
-    Err(_) => Err(Error::Message("'-' requires numeric arguments".to_string())),
+    Err(_) => Err(runtime.error(ErrorReason::Message("'-' requires numeric arguments".to_string()))),
   }
 }
 
-pub fn intrinsic_mul<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_mul(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   let lhs = args[0].kind.clone();
   let rhs = args[1].kind.clone();
   let (lhs, rhs) = lhs.coerce_numeric(rhs);
@@ -219,14 +220,14 @@ pub fn intrinsic_mul<'a>(
       kind: kind.normalize_numeric(),
       span: None,
     }),
-    Err(_) => Err(Error::Message("'*' requires numeric arguments".to_string())),
+    Err(_) => Err(runtime.error(ErrorReason::Message("'*' requires numeric arguments".to_string()))),
   }
 }
 
-pub fn intrinsic_div<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_div(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let lhs = args[0].kind.clone();
@@ -235,10 +236,10 @@ pub fn intrinsic_div<'a>(
 
   match &rhs {
     ExprKind::Integer(0) => {
-      return Err(Error::Message("'/' division by zero".to_string()));
+      return Err(runtime.error(ErrorReason::Message("'/' division by zero".to_string())));
     }
     ExprKind::Float(f) if *f == 0.0 => {
-      return Err(Error::Message("'/' division by zero".to_string()));
+      return Err(runtime.error(ErrorReason::Message("'/' division by zero".to_string())));
     }
     _ => {}
   }
@@ -248,14 +249,14 @@ pub fn intrinsic_div<'a>(
       kind: kind.normalize_numeric(),
       span: None,
     }),
-    Err(_) => Err(Error::Message("'/' requires numeric arguments".to_string())),
+    Err(_) => Err(runtime.error(ErrorReason::Message("'/' requires numeric arguments".to_string()))),
   }
 }
 
-pub fn intrinsic_mod<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_mod(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let lhs = args[0].kind.clone();
@@ -264,10 +265,10 @@ pub fn intrinsic_mod<'a>(
 
   match &rhs {
     ExprKind::Integer(0) => {
-      return Err(Error::Message("'%' modulo by zero".to_string()));
+      return Err(runtime.error(ErrorReason::Message("'%' modulo by zero".to_string())));
     }
     ExprKind::Float(f) if *f == 0.0 => {
-      return Err(Error::Message("'%' modulo by zero".to_string()));
+      return Err(runtime.error(ErrorReason::Message("'%' modulo by zero".to_string())));
     }
     _ => {}
   }
@@ -277,16 +278,16 @@ pub fn intrinsic_mod<'a>(
       kind: kind.normalize_numeric(),
       span: None,
     }),
-    Err(_) => Err(Error::Message("'%' requires numeric arguments".to_string())),
+    Err(_) => Err(runtime.error(ErrorReason::Message("'%' requires numeric arguments".to_string()))),
   }
 }
 
 // Comparison
 
-pub fn intrinsic_eq<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_eq(
+  _runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let lhs = args[0].kind.clone();
@@ -298,10 +299,10 @@ pub fn intrinsic_eq<'a>(
   })
 }
 
-pub fn intrinsic_neq<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_neq(
+  _runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let lhs = args[0].kind.clone();
@@ -313,10 +314,10 @@ pub fn intrinsic_neq<'a>(
   })
 }
 
-pub fn intrinsic_lt<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_lt(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let lhs = args[0].kind.clone();
@@ -327,16 +328,16 @@ pub fn intrinsic_lt<'a>(
       kind: ExprKind::Boolean(ord.is_lt()),
       span: None,
     }),
-    None => Err(Error::Message(
+    None => Err(runtime.error(ErrorReason::Message(
       "'<' requires comparable arguments".to_string(),
-    )),
+    ))),
   }
 }
 
-pub fn intrinsic_lte<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_lte(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let lhs = args[0].kind.clone();
@@ -347,16 +348,16 @@ pub fn intrinsic_lte<'a>(
       kind: ExprKind::Boolean(ord.is_le()),
       span: None,
     }),
-    None => Err(Error::Message(
+    None => Err(runtime.error(ErrorReason::Message(
       "'<=' requires comparable arguments".to_string(),
-    )),
+    ))),
   }
 }
 
-pub fn intrinsic_gt<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_gt(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let lhs = args[0].kind.clone();
@@ -367,16 +368,16 @@ pub fn intrinsic_gt<'a>(
       kind: ExprKind::Boolean(ord.is_gt()),
       span: None,
     }),
-    None => Err(Error::Message(
+    None => Err(runtime.error(ErrorReason::Message(
       "'>' requires comparable arguments".to_string(),
-    )),
+    ))),
   }
 }
 
-pub fn intrinsic_gte<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_gte(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let lhs = args[0].kind.clone();
@@ -387,25 +388,25 @@ pub fn intrinsic_gte<'a>(
       kind: ExprKind::Boolean(ord.is_ge()),
       span: None,
     }),
-    None => Err(Error::Message(
+    None => Err(runtime.error(ErrorReason::Message(
       "'>=' requires comparable arguments".to_string(),
-    )),
+    ))),
   }
 }
 
 // Boolean
 
-pub fn intrinsic_not<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_not(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let val = args[0].kind.clone();
   let ExprKind::Boolean(b) = val else {
-    return Err(Error::Message(
+    return Err(runtime.error(ErrorReason::Message(
       "'not' requires a boolean argument".to_string(),
-    ));
+    )));
   };
   Ok(Expr {
     kind: ExprKind::Boolean(!b),
@@ -415,10 +416,10 @@ pub fn intrinsic_not<'a>(
 
 // List Operations
 
-pub fn intrinsic_list<'a>(
-  runtime: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_list(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let evaluated = args
@@ -426,31 +427,31 @@ pub fn intrinsic_list<'a>(
     .map(|expr| runtime.eval_expr(expr))
     .collect::<Result<Vec<_>, _>>()?;
   Ok(Expr {
-    kind: ExprKind::List(Arc::new(evaluated)),
+    kind: ExprKind::List(Rc::new(evaluated)),
     span: None,
   })
 }
 
-pub fn intrinsic_nth<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_nth(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let idx_val = args[0].clone();
   let ExprKind::Integer(idx) = idx_val.kind else {
-    return Err(Error::CallError(CallError {
+    return Err(runtime.error(ErrorReason::CallError(CallError {
       symbol: "nth".to_owned(),
       kind: CallErrorKind::TypeMismatch {
         expected: vec!["integer".to_owned()],
         received: vec![idx_val.kind.type_name().to_owned()],
       },
-    }));
+    })));
   };
   if idx < 0 {
-    return Err(Error::Message(
+    return Err(runtime.error(ErrorReason::Message(
       "'nth' index must be non-negative".to_string(),
-    ));
+    )));
   }
   let idx = idx as usize;
 
@@ -458,7 +459,7 @@ pub fn intrinsic_nth<'a>(
   let col_type = col_val.kind.type_name().to_owned();
   match col_val.kind {
     ExprKind::List(items) => items.get(idx).cloned().ok_or_else(|| {
-      Error::Message(format!("'nth' index {} out of bounds", idx))
+      runtime.error(ErrorReason::Message(format!("'nth' index {} out of bounds", idx)))
     }),
     ExprKind::String(s) => s
       .chars()
@@ -468,38 +469,38 @@ pub fn intrinsic_nth<'a>(
         span: None,
       })
       .ok_or_else(|| {
-        Error::Message(format!("'nth' index {} out of bounds", idx))
+        runtime.error(ErrorReason::Message(format!("'nth' index {} out of bounds", idx)))
       }),
-    _ => Err(Error::CallError(CallError {
+    _ => Err(runtime.error(ErrorReason::CallError(CallError {
       symbol: "nth".to_owned(),
       kind: CallErrorKind::TypeMismatch {
         expected: vec!["list".to_owned(), "string".to_owned()],
         received: vec![col_type],
       },
-    })),
+    }))),
   }
 }
 
-pub fn intrinsic_set_nth<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_set_nth(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let idx_val = args[0].clone();
   let ExprKind::Integer(idx) = idx_val.kind else {
-    return Err(Error::CallError(CallError {
+    return Err(runtime.error(ErrorReason::CallError(CallError {
       symbol: "set-nth".to_owned(),
       kind: CallErrorKind::TypeMismatch {
         expected: vec!["integer".to_owned()],
         received: vec![idx_val.kind.type_name().to_owned()],
       },
-    }));
+    })));
   };
   if idx < 0 {
-    return Err(Error::Message(
+    return Err(runtime.error(ErrorReason::Message(
       "'set-nth' index must be non-negative".to_string(),
-    ));
+    )));
   }
   let idx = idx as usize;
 
@@ -508,34 +509,34 @@ pub fn intrinsic_set_nth<'a>(
   let list_type = list_val.kind.type_name().to_owned();
 
   let ExprKind::List(items) = list_val.kind else {
-    return Err(Error::CallError(CallError {
+    return Err(runtime.error(ErrorReason::CallError(CallError {
       symbol: "set-nth".to_owned(),
       kind: CallErrorKind::TypeMismatch {
         expected: vec!["list".to_owned()],
         received: vec![list_type],
       },
-    }));
+    })));
   };
 
   if idx >= items.len() {
-    return Err(Error::Message(format!(
+    return Err(runtime.error(ErrorReason::Message(format!(
       "'set-nth' index {} out of bounds",
       idx
-    )));
+    ))));
   }
 
   let mut new_items = (*items).clone();
   new_items[idx] = new_val;
   Ok(Expr {
-    kind: ExprKind::List(Arc::new(new_items)),
+    kind: ExprKind::List(Rc::new(new_items)),
     span: None,
   })
 }
 
-pub fn intrinsic_push<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_push(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let list_val = args[0].clone();
@@ -543,61 +544,61 @@ pub fn intrinsic_push<'a>(
   let list_type = list_val.kind.type_name().to_owned();
 
   let ExprKind::List(items) = list_val.kind else {
-    return Err(Error::CallError(CallError {
+    return Err(runtime.error(ErrorReason::CallError(CallError {
       symbol: "push".to_owned(),
       kind: CallErrorKind::TypeMismatch {
         expected: vec!["list".to_owned()],
         received: vec![list_type],
       },
-    }));
+    })));
   };
 
   let mut new_items = (*items).clone();
   new_items.push(new_val);
   Ok(Expr {
-    kind: ExprKind::List(Arc::new(new_items)),
+    kind: ExprKind::List(Rc::new(new_items)),
     span: None,
   })
 }
 
-pub fn intrinsic_pop<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_pop(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let list_val = args[0].clone();
   let list_type = list_val.kind.type_name().to_owned();
 
   let ExprKind::List(items) = list_val.kind else {
-    return Err(Error::CallError(CallError {
+    return Err(runtime.error(ErrorReason::CallError(CallError {
       symbol: "pop".to_owned(),
       kind: CallErrorKind::TypeMismatch {
         expected: vec!["list".to_owned()],
         received: vec![list_type],
       },
-    }));
+    })));
   };
 
   if items.is_empty() {
-    return Err(Error::Message(
+    return Err(runtime.error(ErrorReason::Message(
       "'pop' requires a non-empty list".to_string(),
-    ));
+    )));
   }
 
   let new_items = items[..items.len() - 1].to_vec();
   Ok(Expr {
-    kind: ExprKind::List(Arc::new(new_items)),
+    kind: ExprKind::List(Rc::new(new_items)),
     span: None,
   })
 }
 
 // Type & I/O
 
-pub fn intrinsic_len<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_len(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let val = args[0].kind.clone();
@@ -610,16 +611,16 @@ pub fn intrinsic_len<'a>(
       kind: ExprKind::Integer(list.len() as i64),
       span: None,
     }),
-    _ => Err(Error::Message(
+    _ => Err(runtime.error(ErrorReason::Message(
       "'len' requires one string or list argument".to_string(),
-    )),
+    ))),
   }
 }
 
-pub fn intrinsic_typeof<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_typeof(
+  _runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let val = args[0].kind.clone();
@@ -629,10 +630,10 @@ pub fn intrinsic_typeof<'a>(
   })
 }
 
-pub fn intrinsic_print<'a>(
-  runtime: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_print(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let parts = args
@@ -646,19 +647,19 @@ pub fn intrinsic_print<'a>(
   })
 }
 
-pub fn intrinsic_dbg<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_dbg(
+  _runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   let val = args[0].clone();
   println!("{:?}", val);
   Ok(val)
 }
 
-pub fn intrinsic_to_string<'a>(
-  _runtime: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_to_string(
+  _runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   Ok(Expr {
@@ -669,25 +670,25 @@ pub fn intrinsic_to_string<'a>(
 
 // Meta/Error
 
-pub fn intrinsic_lazy<'a>(
-  _runtime: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_lazy(
+  _runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   Ok(args[0].clone())
 }
 
-pub fn intrinsic_eval<'a>(
-  runtime: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_eval(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   let result = args[0].clone();
   runtime.eval_expr(&result)
 }
 
-pub fn intrinsic_call<'a>(
-  runtime: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_call(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   // First arg is unevaluated - evaluate it to get the function
@@ -709,7 +710,7 @@ pub fn intrinsic_call<'a>(
       new_list.push(arg.clone());
     }
     runtime.eval_expr(&Expr {
-      kind: ExprKind::List(Arc::new(new_list)),
+      kind: ExprKind::List(Rc::new(new_list)),
       span: None,
     })
   } else {
@@ -717,10 +718,10 @@ pub fn intrinsic_call<'a>(
   }
 }
 
-pub fn intrinsic_try<'a>(
-  runtime: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_try(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   match runtime.eval_expr(&args[0]) {
@@ -732,40 +733,40 @@ pub fn intrinsic_try<'a>(
   }
 }
 
-pub fn intrinsic_error<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_error(
+  _runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let inner = args[0].clone();
   Ok(Expr {
-    kind: ExprKind::Error(Error::Message(inner.to_string())),
+    kind: ExprKind::Error(Rc::from(inner.to_string())),
     span: None,
   })
 }
 
-pub fn intrinsic_throw<'a>(
-  _: &mut Runtime<'a>,
-  args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>, Error> {
+pub fn intrinsic_throw(
+  runtime: &mut Runtime,
+  args: Vec<Expr>,
+) -> Result<Expr, Error> {
   use crate::ast::ExprKind;
 
   let inner = args[0].clone();
   if let ExprKind::Error(ref err) = inner.kind {
-    Err(err.clone())
+    Err(runtime.error(ErrorReason::Message(err.to_string())))
   } else {
-    Err(Error::CallError(CallError {
+    Err(runtime.error(ErrorReason::CallError(CallError {
       symbol: "throw".to_owned(),
       kind: CallErrorKind::TypeMismatch {
         expected: vec!["error".to_owned()],
         received: vec![inner.kind.type_name().to_owned()],
       },
-    }))
+    })))
   }
 }
 
-pub fn arithmetic(map: &mut HashMap<&'static str, &'static Intrinsic>) {
+pub fn arithmetic(map: &mut HashMap<&'static str, Intrinsic>) {
   const ADD: Intrinsic = Intrinsic {
     name: "+",
     params: &[
@@ -807,14 +808,14 @@ pub fn arithmetic(map: &mut HashMap<&'static str, &'static Intrinsic>) {
     handler: intrinsic_mod,
   };
 
-  map.insert("+", &ADD);
-  map.insert("-", &SUB);
-  map.insert("*", &MUL);
-  map.insert("/", &DIV);
-  map.insert("%", &MOD);
+  map.insert("+", ADD);
+  map.insert("-", SUB);
+  map.insert("*", MUL);
+  map.insert("/", DIV);
+  map.insert("%", MOD);
 }
 
-pub fn comparison(map: &mut HashMap<&'static str, &'static Intrinsic>) {
+pub fn comparison(map: &mut HashMap<&'static str, Intrinsic>) {
   const EQ: Intrinsic = Intrinsic {
     name: "=",
     params: &[Param::EvalTo(ExprType::Any), Param::EvalTo(ExprType::Any)],
@@ -846,25 +847,25 @@ pub fn comparison(map: &mut HashMap<&'static str, &'static Intrinsic>) {
     handler: intrinsic_gte,
   };
 
-  map.insert("=", &EQ);
-  map.insert("!=", &NEQ);
-  map.insert("<", &LT);
-  map.insert("<=", &LTE);
-  map.insert(">", &GT);
-  map.insert(">=", &GTE);
+  map.insert("=", EQ);
+  map.insert("!=", NEQ);
+  map.insert("<", LT);
+  map.insert("<=", LTE);
+  map.insert(">", GT);
+  map.insert(">=", GTE);
 }
 
-pub fn boolean(map: &mut HashMap<&'static str, &'static Intrinsic>) {
+pub fn boolean(map: &mut HashMap<&'static str, Intrinsic>) {
   const NOT: Intrinsic = Intrinsic {
     name: "not",
     params: &[Param::EvalTo(ExprType::Boolean)],
     handler: intrinsic_not,
   };
 
-  map.insert("not", &NOT);
+  map.insert("not", NOT);
 }
 
-pub fn list_ops(map: &mut HashMap<&'static str, &'static Intrinsic>) {
+pub fn list_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   const LIST: Intrinsic = Intrinsic {
     name: "list",
     params: &[Param::Many(ExprType::Any)],
@@ -898,14 +899,14 @@ pub fn list_ops(map: &mut HashMap<&'static str, &'static Intrinsic>) {
     handler: intrinsic_pop,
   };
 
-  map.insert("list", &LIST);
-  map.insert("nth", &NTH);
-  map.insert("set-nth", &SET_NTH);
-  map.insert("push", &PUSH);
-  map.insert("pop", &POP);
+  map.insert("list", LIST);
+  map.insert("nth", NTH);
+  map.insert("set-nth", SET_NTH);
+  map.insert("push", PUSH);
+  map.insert("pop", POP);
 }
 
-pub fn type_ops(map: &mut HashMap<&'static str, &'static Intrinsic>) {
+pub fn type_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   const LEN: Intrinsic = Intrinsic {
     name: "len",
     params: &[Param::EvalTo(ExprType::Any)],
@@ -917,11 +918,11 @@ pub fn type_ops(map: &mut HashMap<&'static str, &'static Intrinsic>) {
     handler: intrinsic_typeof,
   };
 
-  map.insert("len", &LEN);
-  map.insert("typeof", &TYPEOF);
+  map.insert("len", LEN);
+  map.insert("typeof", TYPEOF);
 }
 
-pub fn io_ops(map: &mut HashMap<&'static str, &'static Intrinsic>) {
+pub fn io_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   const PRINT: Intrinsic = Intrinsic {
     name: "print",
     params: &[Param::Many(ExprType::Any)],
@@ -938,12 +939,12 @@ pub fn io_ops(map: &mut HashMap<&'static str, &'static Intrinsic>) {
     handler: intrinsic_to_string,
   };
 
-  map.insert("print", &PRINT);
-  map.insert("dbg", &DBG);
-  map.insert("to-string", &TO_STRING);
+  map.insert("print", PRINT);
+  map.insert("dbg", DBG);
+  map.insert("to-string", TO_STRING);
 }
 
-pub fn meta_ops(map: &mut HashMap<&'static str, &'static Intrinsic>) {
+pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   const LAZY: Intrinsic = Intrinsic {
     name: "lazy",
     params: &[Param::One(ExprType::Any)],
@@ -960,12 +961,12 @@ pub fn meta_ops(map: &mut HashMap<&'static str, &'static Intrinsic>) {
     handler: intrinsic_call,
   };
 
-  map.insert("lazy", &LAZY);
-  map.insert("eval", &EVAL);
-  map.insert("call", &CALL);
+  map.insert("lazy", LAZY);
+  map.insert("eval", EVAL);
+  map.insert("call", CALL);
 }
 
-pub fn error_ops(map: &mut HashMap<&'static str, &'static Intrinsic>) {
+pub fn error_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   const TRY: Intrinsic = Intrinsic {
     name: "try",
     params: &[Param::One(ExprType::Any)],
@@ -982,12 +983,12 @@ pub fn error_ops(map: &mut HashMap<&'static str, &'static Intrinsic>) {
     handler: intrinsic_throw,
   };
 
-  map.insert("try", &TRY);
-  map.insert("error", &ERROR);
-  map.insert("throw", &THROW);
+  map.insert("try", TRY);
+  map.insert("error", ERROR);
+  map.insert("throw", THROW);
 }
 
-pub fn all() -> HashMap<&'static str, &'static Intrinsic> {
+pub fn all() -> HashMap<&'static str, Intrinsic> {
   let mut map = HashMap::new();
   arithmetic(&mut map);
   comparison(&mut map);

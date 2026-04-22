@@ -49,7 +49,7 @@ fn run_repl() {
     DefaultPromptSegment::Empty,
   );
 
-  let mut runtime: Runtime<'static> = Runtime::default();
+  let mut runtime = Runtime::default();
   loop {
     match repl.read_line(&prompt) {
       Ok(Signal::CtrlC) | Ok(Signal::CtrlD) => {
@@ -79,8 +79,7 @@ fn run_repl() {
 
         match parse(&line, tokens) {
           Ok(exprs) => {
-            let exprs: Vec<_> =
-              exprs.into_iter().map(|e| e.into_owned()).collect();
+            let exprs: Vec<_> = exprs.into_iter().collect();
             for expr in &exprs {
               match runtime.eval_expr(expr) {
                 Ok(result) => println!("{result}"),

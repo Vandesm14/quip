@@ -1,11 +1,9 @@
 use core::{cmp::Ordering, fmt, ops, ops::Range};
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
+use std::{collections::HashMap, rc::Rc};
 
 use itertools::Itertools;
 use slotmap::DefaultKey;
 use strum::EnumDiscriminants;
-
-use crate::run::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token {
@@ -217,90 +215,44 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Expr<'a> {
-  pub kind: ExprKind<'a>,
+pub struct Expr {
+  pub kind: ExprKind,
   pub span: Option<Span>,
 }
 
-impl<'a> core::fmt::Display for Expr<'a> {
+impl core::fmt::Display for Expr {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{}", &self.kind)
   }
 }
 
-impl<'a> Expr<'a> {
-  /// Converts all borrowed string slices into owned `String`s, producing an
-  /// `Expr<'static>` that is independent of any source lifetime.
-  pub fn into_owned(self) -> Expr<'static> {
-    Expr {
-      kind: self.kind.into_owned(),
-      span: self.span,
-    }
-  }
-}
-
 #[derive(Debug, Clone, Default, EnumDiscriminants)]
 #[strum_discriminants(name(ExprKindVariants))]
-pub enum ExprKind<'a> {
+pub enum ExprKind {
   #[default]
   Nil,
 
   String(String),
-  Keyword(Cow<'a, str>),
-  Symbol(Cow<'a, str>),
-  Error(Error),
+  Keyword(Rc<str>),
+  Symbol(Rc<str>),
+  Error(Rc<str>),
 
   Float(f64),
   Integer(i64),
 
   Boolean(bool),
 
-  List(Arc<Vec<Expr<'a>>>),
-  Map(HashMap<Cow<'a, str>, Expr<'a>>),
+  List(Rc<Vec<Expr>>),
+  Map(HashMap<Rc<str>, Expr>),
 
   Function {
-    params: Vec<Cow<'a, str>>,
-    body: Vec<Expr<'a>>,
+    params: Vec<Rc<str>>,
+    body: Vec<Expr>,
     env: DefaultKey,
   },
 }
 
-impl<'a> ExprKind<'a> {
-  pub fn into_owned(self) -> ExprKind<'static> {
-    match self {
-      ExprKind::Nil => ExprKind::Nil,
-      ExprKind::String(s) => ExprKind::String(s),
-      ExprKind::Keyword(k) => ExprKind::Keyword(Cow::Owned(k.into_owned())),
-      ExprKind::Symbol(s) => ExprKind::Symbol(Cow::Owned(s.into_owned())),
-      ExprKind::Error(e) => ExprKind::Error(e),
-
-      ExprKind::Float(f) => ExprKind::Float(f),
-      ExprKind::Integer(i) => ExprKind::Integer(i),
-      ExprKind::Boolean(b) => ExprKind::Boolean(b),
-
-      ExprKind::List(list) => {
-        let items = Arc::try_unwrap(list).unwrap_or_else(|arc| (*arc).clone());
-        ExprKind::List(Arc::new(
-          items.into_iter().map(Expr::into_owned).collect(),
-        ))
-      }
-      ExprKind::Map(map) => ExprKind::Map(
-        map
-          .into_iter()
-          .map(|(k, v)| (Cow::Owned(k.into_owned()), v.into_owned()))
-          .collect(),
-      ),
-      ExprKind::Function { params, body, env } => ExprKind::Function {
-        params: params
-          .into_iter()
-          .map(|p| Cow::Owned(p.into_owned()))
-          .collect(),
-        body: body.into_iter().map(Expr::into_owned).collect(),
-        env,
-      },
-    }
-  }
-
+impl ExprKind {
   /// Promotes two numeric operands to a common type. If either operand is a
   /// [`Float`], both are returned as [`Float`]s. Non-numeric operands are
   /// returned unchanged.
@@ -349,7 +301,7 @@ impl<'a> ExprKind<'a> {
   }
 }
 
-impl<'a> core::fmt::Display for ExprKind<'a> {
+impl core::fmt::Display for ExprKind {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       ExprKind::Nil => write!(f, "nil"),
@@ -376,7 +328,7 @@ impl<'a> core::fmt::Display for ExprKind<'a> {
   }
 }
 
-impl<'a> PartialEq for ExprKind<'a> {
+impl PartialEq for ExprKind {
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
       (Self::Nil, Self::Nil) => true,
@@ -414,7 +366,7 @@ impl<'a> PartialEq for ExprKind<'a> {
   }
 }
 
-impl<'a> PartialOrd for ExprKind<'a> {
+impl PartialOrd for ExprKind {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
     match (self, other) {
       (Self::Nil, Self::Nil) => Some(Ordering::Equal),
@@ -446,7 +398,7 @@ impl<'a> PartialOrd for ExprKind<'a> {
   }
 }
 
-impl<'a> ops::Add for ExprKind<'a> {
+impl ops::Add for ExprKind {
   type Output = Result<Self, (Self, Self)>;
 
   fn add(self, rhs: Self) -> Self::Output {
@@ -461,7 +413,7 @@ impl<'a> ops::Add for ExprKind<'a> {
   }
 }
 
-impl<'a> ops::Sub for ExprKind<'a> {
+impl ops::Sub for ExprKind {
   type Output = Result<Self, (Self, Self)>;
 
   fn sub(self, rhs: Self) -> Self::Output {
@@ -476,7 +428,7 @@ impl<'a> ops::Sub for ExprKind<'a> {
   }
 }
 
-impl<'a> ops::Mul for ExprKind<'a> {
+impl ops::Mul for ExprKind {
   type Output = Result<Self, (Self, Self)>;
 
   fn mul(self, rhs: Self) -> Self::Output {
@@ -491,7 +443,7 @@ impl<'a> ops::Mul for ExprKind<'a> {
   }
 }
 
-impl<'a> ops::Div for ExprKind<'a> {
+impl ops::Div for ExprKind {
   type Output = Result<Self, (Self, Self)>;
 
   fn div(self, rhs: Self) -> Self::Output {
@@ -506,7 +458,7 @@ impl<'a> ops::Div for ExprKind<'a> {
   }
 }
 
-impl<'a> ops::Rem for ExprKind<'a> {
+impl ops::Rem for ExprKind {
   type Output = Result<Self, (Self, Self)>;
 
   fn rem(self, rhs: Self) -> Self::Output {
@@ -519,10 +471,7 @@ impl<'a> ops::Rem for ExprKind<'a> {
   }
 }
 
-pub fn parse<'a>(
-  source: &'a str,
-  tokens: Vec<Token>,
-) -> Result<Vec<Expr<'a>>, String> {
+pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
   let mut stack: Vec<Vec<Expr>> = vec![Vec::new()];
   let mut spans = vec![];
 
@@ -547,7 +496,7 @@ pub fn parse<'a>(
           && let Some(last) = stack.last_mut()
         {
           last.push(Expr {
-            kind: ExprKind::List(Arc::new(current)),
+            kind: ExprKind::List(Rc::new(current)),
             span: Some(Span {
               start: start_span.start,
               end: token.span.end,
@@ -614,7 +563,7 @@ pub fn parse<'a>(
             });
           } else {
             last.push(Expr {
-              kind: ExprKind::Symbol(Cow::from(span)),
+              kind: ExprKind::Symbol(Rc::from(span)),
               span: Some(token.span),
             });
           }
@@ -623,7 +572,7 @@ pub fn parse<'a>(
       TokenKind::Keyword => {
         if let Some(last) = stack.last_mut() {
           last.push(Expr {
-            kind: ExprKind::Keyword(Cow::from(span)),
+            kind: ExprKind::Keyword(Rc::from(span)),
             span: Some(token.span),
           });
         }

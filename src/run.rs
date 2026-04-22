@@ -1,21 +1,73 @@
-use std::borrow::Cow;
+use std::rc::Rc;
 
 use crate::{
   ast::{Expr, ExprKind, Span},
   context::Context,
 };
 
+#[derive(Debug, Clone)]
+pub struct Error {
+  pub reason: ErrorReason,
+  pub call_stack: Vec<CallFrame>,
+}
+
+impl core::fmt::Display for Error {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    const LOCATION_PADDING: usize = 8;
+
+    writeln!(f, "{}", self.reason)?;
+    writeln!(f, "call stack:")?;
+
+    for call_frame in self.call_stack.iter().rev() {
+      write!(f, "    ")?;
+
+      let location = if let Some(span) = call_frame.expr.span {
+        format!("{}:{}:", span.line, span.column)
+      } else {
+        "??:??:".into()
+      };
+
+      write!(f, "{location} ")?;
+
+      let location_padding = (location.len() < LOCATION_PADDING)
+        .then(|| " ".repeat(LOCATION_PADDING - location.len()));
+
+      if let Some(location_padding) = &location_padding {
+        write!(f, "{location_padding}")?;
+      }
+
+      write!(f, "{}", call_frame.expr)?;
+
+      if call_frame.recurs != 0 {
+        writeln!(f)?;
+        write!(f, "    {}", " ".repeat(location.len()))?;
+
+        if let Some(location_padding) = &location_padding {
+          write!(f, "{location_padding}")?;
+        }
+
+        let plural = if call_frame.recurs != 1 { "s" } else { "" };
+        writeln!(f, "     ^ recursed {} time{plural}", call_frame.recurs)?;
+      } else {
+        writeln!(f)?;
+      }
+    }
+
+    Ok(())
+  }
+}
+
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
-pub enum Error {
+pub enum ErrorReason {
   #[error("{0}")]
   CallError(#[from] CallError),
   #[error("{0}")]
   Message(String),
 }
 
-impl From<String> for Error {
+impl From<String> for ErrorReason {
   fn from(msg: String) -> Self {
-    Error::Message(msg)
+    Self::Message(msg)
   }
 }
 
@@ -40,19 +92,19 @@ pub enum CallErrorKind {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct Runtime<'a> {
-  pub context: Context<'a>,
-  pub recur: Option<Vec<Expr<'a>>>,
-  pub call_stack: Vec<CallFrame<'a>>,
+pub struct Runtime {
+  pub context: Context,
+  pub recur: Option<Vec<Expr>>,
+  pub call_stack: Vec<CallFrame>,
 }
 
-impl<'a> Runtime<'a> {
+impl Runtime {
   pub fn call(
     &mut self,
-    expr: &Expr<'a>,
-    call_args: Vec<Expr<'a>>,
+    expr: &Expr,
+    call_args: Vec<Expr>,
     name: &str,
-  ) -> Result<Expr<'a>, Error> {
+  ) -> Result<Expr, Error> {
     let ExprKind::Function {
       ref params,
       ref body,
@@ -65,13 +117,16 @@ impl<'a> Runtime<'a> {
     };
 
     if call_args.len() != params.len() {
-      return Err(Error::CallError(CallError {
-        symbol: name.to_owned(),
-        kind: CallErrorKind::IncorrectArity {
-          expected: params.len(),
-          received: call_args.len(),
-        },
-      }));
+      return Err(Error {
+        reason: ErrorReason::CallError(CallError {
+          symbol: name.to_owned(),
+          kind: CallErrorKind::IncorrectArity {
+            expected: params.len(),
+            received: call_args.len(),
+          },
+        }),
+        call_stack: self.call_stack.clone(),
+      });
     }
 
     self.recur = Some(call_args);
@@ -86,7 +141,7 @@ impl<'a> Runtime<'a> {
       recurs: 0,
     });
 
-    while let Some(args) = core::mem::take(&mut self.recur) {
+    while let Some(args) = self.recur.take() {
       let mut bound = Vec::new();
       for (param, arg_expr) in params.iter().zip(args.iter()) {
         let val = self.eval_expr(arg_expr)?;
@@ -117,9 +172,9 @@ impl<'a> Runtime<'a> {
   }
 
   fn parse_params(
-    param_list: &[Expr<'a>],
+    param_list: &[Expr],
     ctx: &str,
-  ) -> Result<Vec<Cow<'a, str>>, String> {
+  ) -> Result<Vec<Rc<str>>, String> {
     param_list
       .iter()
       .map(|p| {
@@ -132,7 +187,7 @@ impl<'a> Runtime<'a> {
       .collect()
   }
 
-  pub fn eval_expr(&mut self, expr: &Expr<'a>) -> Result<Expr<'a>, Error> {
+  pub fn eval_expr(&mut self, expr: &Expr) -> Result<Expr, Error> {
     if let ExprKind::List(list) = &expr.kind
       && let Some(ExprKind::Symbol(sym)) = list.first().map(|e| &e.kind)
     {
@@ -154,12 +209,17 @@ impl<'a> Runtime<'a> {
         "fn" => {
           // (fn (params...) body...)
           let Some(params_expr) = list.get(1) else {
-            return Err(Error::Message("fn: expected params list".to_string()));
+            return Err(self.error(ErrorReason::Message(
+              "fn: expected params list".to_string(),
+            )));
           };
           let ExprKind::List(param_list) = &params_expr.kind else {
-            return Err(Error::Message("fn: expected params list".to_string()));
+            return Err(self.error(ErrorReason::Message(
+              "fn: expected params list".to_string(),
+            )));
           };
-          let params = Self::parse_params(param_list, "fn")?;
+          let params = Self::parse_params(param_list, "fn")
+            .map_err(|e| self.error(e.into()))?;
           let body = list.get(2..).unwrap_or(&[]).to_vec();
           let env = self.context.current();
           Ok(Expr {
@@ -171,19 +231,23 @@ impl<'a> Runtime<'a> {
         "defn" => {
           // (defn name (params...) body...)  →  (def name (fn (params...) body...))
           let Some([name, params_expr]) = list.get(1..3) else {
-            return Err(Error::Message(
+            return Err(self.error(ErrorReason::Message(
               "defn: expected name and params".to_string(),
-            ));
+            )));
           };
           let ExprKind::Symbol(sym) = &name.kind else {
-            return Err(Error::Message("defn: invalid name".to_string()));
+            return Err(
+              self
+                .error(ErrorReason::Message("defn: invalid name".to_string())),
+            );
           };
           let ExprKind::List(param_list) = &params_expr.kind else {
-            return Err(Error::Message(
+            return Err(self.error(ErrorReason::Message(
               "defn: expected params list".to_string(),
-            ));
+            )));
           };
-          let params = Self::parse_params(param_list, "defn")?;
+          let params = Self::parse_params(param_list, "defn")
+            .map_err(|e| self.error(e.into()))?;
           let body = list.get(3..).unwrap_or(&[]).to_vec();
           let env = self.context.current();
           let func = Expr {
@@ -197,29 +261,36 @@ impl<'a> Runtime<'a> {
         "def" => {
           if let Some([name, val]) = list.get(1..3) {
             let ExprKind::Symbol(sym) = &name.kind else {
-              return Err(Error::Message("def: invalid name".to_string()));
+              return Err(
+                self
+                  .error(ErrorReason::Message("def: invalid name".to_string())),
+              );
             };
             let val = self.eval_expr(val)?;
             self.context.define(sym.clone(), val.clone());
             Ok(name.clone())
           } else {
-            Err(Error::Message("invalid def".to_string()))
+            Err(self.error(ErrorReason::Message("invalid def".to_string())))
           }
         }
 
         "set" => {
           if let Some([name, val]) = list.get(1..3) {
             let ExprKind::Symbol(name) = &name.kind else {
-              return Err(Error::Message("set: invalid name".to_string()));
+              return Err(
+                self
+                  .error(ErrorReason::Message("set: invalid name".to_string())),
+              );
             };
             let val = self.eval_expr(val)?;
             self
               .context
               .set(name.clone(), val.clone())
-              .map_err(Error::Message)?;
+              .map_err(ErrorReason::Message)
+              .map_err(|e| self.error(e))?;
             Ok(val)
           } else {
-            Err(Error::Message("invalid set".to_string()))
+            Err(self.error(ErrorReason::Message("invalid set".to_string())))
           }
         }
 
@@ -227,9 +298,9 @@ impl<'a> Runtime<'a> {
           if let Some([lhs, rhs]) = list.get(1..3) {
             let lhs = self.eval_expr(lhs)?.kind;
             let ExprKind::Boolean(lhs) = lhs else {
-              return Err(Error::Message(
+              return Err(self.error(ErrorReason::Message(
                 "'and' requires boolean arguments".to_string(),
-              ));
+              )));
             };
             if !lhs {
               return Ok(Expr {
@@ -239,22 +310,22 @@ impl<'a> Runtime<'a> {
             }
             let rhs = self.eval_expr(rhs)?.kind;
             let ExprKind::Boolean(rhs) = rhs else {
-              return Err(Error::Message(
+              return Err(self.error(ErrorReason::Message(
                 "'and' requires boolean arguments".to_string(),
-              ));
+              )));
             };
             Ok(Expr {
               kind: ExprKind::Boolean(rhs),
               span: None,
             })
           } else {
-            Err(Error::CallError(CallError {
+            Err(self.error(ErrorReason::CallError(CallError {
               symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
               },
-            }))
+            })))
           }
         }
 
@@ -262,9 +333,9 @@ impl<'a> Runtime<'a> {
           if let Some([lhs, rhs]) = list.get(1..3) {
             let lhs = self.eval_expr(lhs)?.kind;
             let ExprKind::Boolean(lhs) = lhs else {
-              return Err(Error::Message(
+              return Err(self.error(ErrorReason::Message(
                 "'or' requires boolean arguments".to_string(),
-              ));
+              )));
             };
             if lhs {
               return Ok(Expr {
@@ -274,22 +345,22 @@ impl<'a> Runtime<'a> {
             }
             let rhs = self.eval_expr(rhs)?.kind;
             let ExprKind::Boolean(rhs) = rhs else {
-              return Err(Error::Message(
+              return Err(self.error(ErrorReason::Message(
                 "'or' requires boolean arguments".to_string(),
-              ));
+              )));
             };
             Ok(Expr {
               kind: ExprKind::Boolean(rhs),
               span: None,
             })
           } else {
-            Err(Error::CallError(CallError {
+            Err(self.error(ErrorReason::CallError(CallError {
               symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len().saturating_sub(1),
               },
-            }))
+            })))
           }
         }
 
@@ -303,13 +374,13 @@ impl<'a> Runtime<'a> {
 
         "if" => {
           let Some([cond_expr, body_expr]) = list.get(1..3) else {
-            return Err(Error::CallError(CallError {
+            return Err(self.error(ErrorReason::CallError(CallError {
               symbol,
               kind: CallErrorKind::IncorrectArity {
                 expected: 2,
                 received: list.len() - 1,
               },
-            }));
+            })));
           };
           let cond = self.eval_expr(cond_expr)?;
           if let ExprKind::Boolean(true) = cond.kind {
@@ -335,32 +406,42 @@ impl<'a> Runtime<'a> {
           // Symbol look-up.
           let val =
             self.context.get(symbol.as_str()).cloned().ok_or_else(|| {
-              Error::Message(format!("undefined '{}'", symbol))
+              self
+                .error(ErrorReason::Message(format!("undefined '{}'", symbol)))
             })?;
           if let ExprKind::Function { .. } = val.kind {
             let call_args = list.get(1..).unwrap_or(&[]);
             self.call(&val, call_args.to_vec(), symbol.as_ref())
           } else {
-            Err(Error::Message(format!("'{}' is not a function", symbol)))
+            Err(self.error(ErrorReason::Message(format!(
+              "'{}' is not a function",
+              symbol
+            ))))
           }
         }
       }
     } else if let ExprKind::Symbol(sym) = &expr.kind {
       // Get vars.
-      self
-        .context
-        .get(sym)
-        .cloned()
-        .ok_or_else(|| Error::Message(format!("undefined fn '{}'", sym)))
+      self.context.get(sym).cloned().ok_or_else(|| {
+        self.error(ErrorReason::Message(format!("undefined fn '{}'", sym)))
+      })
     } else {
       Ok(expr.clone())
+    }
+  }
+
+  #[inline]
+  pub(crate) fn error(&self, reason: ErrorReason) -> Error {
+    Error {
+      reason,
+      call_stack: self.call_stack.clone(),
     }
   }
 }
 
 #[derive(Debug, Clone)]
-pub struct CallFrame<'a> {
-  pub expr: Expr<'a>,
+pub struct CallFrame {
+  pub expr: Expr,
   pub call_site: Option<Span>,
   pub recurs: usize,
 }
@@ -370,7 +451,7 @@ mod tests {
   use super::*;
   use crate::ast::{lex, parse};
 
-  fn run(source: &str) -> Result<Expr<'_>, String> {
+  fn run(source: &str) -> Result<Expr, String> {
     let tokens = lex(source);
     let exprs = parse(source, tokens)?;
     let mut runtime = Runtime::default();
@@ -384,7 +465,7 @@ mod tests {
     Ok(last)
   }
 
-  fn run_runtime(source: &str) -> Runtime<'_> {
+  fn run_runtime(source: &str) -> Runtime {
     let tokens = lex(source);
     let exprs = parse(source, tokens).unwrap();
     let mut runtime = Runtime::default();
@@ -394,7 +475,7 @@ mod tests {
     runtime
   }
 
-  fn eval_source<'a>(runtime: &mut Runtime<'a>, source: &'a str) -> Expr<'a> {
+  fn eval_source(runtime: &mut Runtime, source: &str) -> Expr {
     let tokens = lex(source);
     let exprs = parse(source, tokens).unwrap();
     let mut last = Expr {
@@ -1177,14 +1258,12 @@ mod tests {
     }
 
     mod list {
-      use std::sync::Arc;
-
       use super::*;
 
       #[test]
       fn list_with_no_arguments() {
         let result = run("(list)").unwrap();
-        assert_eq!(result.kind, ExprKind::List(Arc::new(vec![])));
+        assert_eq!(result.kind, ExprKind::List(Rc::new(vec![])));
       }
 
       #[test]
@@ -1818,7 +1897,7 @@ mod tests {
 
     #[test]
     fn gc_should_not_trigger_below_threshold() {
-      let mut runtime: Runtime<'static> = Runtime {
+      let mut runtime = Runtime {
         context: Context::new(10),
         ..Default::default()
       };
@@ -1830,7 +1909,7 @@ mod tests {
 
     #[test]
     fn gc_should_trigger_at_or_above_threshold() {
-      let mut runtime: Runtime<'static> = Runtime {
+      let mut runtime = Runtime {
         context: Context::new(3),
         ..Default::default()
       };
@@ -1848,7 +1927,7 @@ mod tests {
 
     #[test]
     fn gc_removes_orphaned_call_scopes() {
-      let mut runtime: Runtime<'static> = Runtime::default();
+      let mut runtime = Runtime::default();
 
       eval_source(
         &mut runtime,
@@ -1862,7 +1941,7 @@ mod tests {
 
     #[test]
     fn gc_removes_scope_of_overwritten_closure() {
-      let mut runtime: Runtime<'static> = Runtime::default();
+      let mut runtime = Runtime::default();
 
       eval_source(
         &mut runtime,
@@ -1883,7 +1962,7 @@ mod tests {
 
     #[test]
     fn gc_preserves_root_scope() {
-      let mut runtime: Runtime<'static> = Runtime::default();
+      let mut runtime = Runtime::default();
 
       eval_source(&mut runtime, "(def x 42) ((fn () nil)) ((fn () nil))");
       runtime.context.trigger_gc();
@@ -1894,7 +1973,7 @@ mod tests {
 
     #[test]
     fn gc_preserves_live_closure() {
-      let mut runtime: Runtime<'static> = Runtime::default();
+      let mut runtime = Runtime::default();
 
       eval_source(
         &mut runtime,
@@ -1926,7 +2005,7 @@ mod tests {
 
     #[test]
     fn gc_preserves_closure_parent_chain() {
-      let mut runtime: Runtime<'static> = Runtime::default();
+      let mut runtime = Runtime::default();
 
       eval_source(
         &mut runtime,
@@ -1950,7 +2029,7 @@ mod tests {
 
     #[test]
     fn gc_preserves_multiple_closures_sharing_state() {
-      let mut runtime: Runtime<'static> = Runtime::default();
+      let mut runtime = Runtime::default();
 
       eval_source(
         &mut runtime,
@@ -1975,7 +2054,7 @@ mod tests {
 
     #[test]
     fn gc_is_deterministic() {
-      let mut runtime: Runtime<'static> = Runtime::default();
+      let mut runtime = Runtime::default();
 
       eval_source(
         &mut runtime,

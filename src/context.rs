@@ -1,7 +1,7 @@
 use std::{
-  borrow::Cow,
   collections::{HashMap, HashSet},
   panic,
+  rc::Rc,
 };
 
 use slotmap::{DefaultKey, SlotMap};
@@ -9,12 +9,12 @@ use slotmap::{DefaultKey, SlotMap};
 use crate::ast::{Expr, ExprKind};
 
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct Scope<'a> {
-  pub vars: HashMap<Cow<'a, str>, Expr<'a>>,
+pub struct Scope {
+  pub vars: HashMap<Rc<str>, Expr>,
   pub parent: Option<DefaultKey>,
 }
 
-impl<'a> Scope<'a> {
+impl Scope {
   pub fn new(parent: Option<DefaultKey>) -> Self {
     Self {
       vars: HashMap::new(),
@@ -24,14 +24,14 @@ impl<'a> Scope<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Context<'a> {
-  envs: SlotMap<DefaultKey, Scope<'a>>,
+pub struct Context {
+  envs: SlotMap<DefaultKey, Scope>,
   current: DefaultKey,
   gc_threshold: usize,
   root_id: DefaultKey,
 }
 
-impl<'a> Default for Context<'a> {
+impl Default for Context {
   fn default() -> Self {
     let mut envs = SlotMap::new();
     let current = envs.insert(Scope::new(None));
@@ -45,7 +45,7 @@ impl<'a> Default for Context<'a> {
   }
 }
 
-impl<'a> Context<'a> {
+impl Context {
   pub fn new(gc_threshold: usize) -> Self {
     Self {
       gc_threshold,
@@ -57,7 +57,7 @@ impl<'a> Context<'a> {
     self.current
   }
 
-  pub fn get(&self, name: &str) -> Option<&Expr<'a>> {
+  pub fn get(&self, name: &str) -> Option<&Expr> {
     let mut idx = self.current;
     loop {
       if let Some(val) = self.envs.get(idx).unwrap().vars.get(name) {
@@ -70,15 +70,11 @@ impl<'a> Context<'a> {
     }
   }
 
-  pub fn define(&mut self, name: Cow<'a, str>, val: Expr<'a>) {
+  pub fn define(&mut self, name: Rc<str>, val: Expr) {
     self.envs[self.current].vars.insert(name, val);
   }
 
-  pub fn set(
-    &mut self,
-    name: Cow<'a, str>,
-    val: Expr<'a>,
-  ) -> Result<(), String> {
+  pub fn set(&mut self, name: Rc<str>, val: Expr) -> Result<(), String> {
     let mut idx = self.current;
     loop {
       #[allow(clippy::map_entry)]
@@ -106,7 +102,7 @@ impl<'a> Context<'a> {
   }
 
   /// Walks the parents of a scope and returns them in ascending order [self, 1st order parent, 2nd order parent, ...].
-  fn parents(&self, key: DefaultKey) -> Option<Vec<(DefaultKey, Scope<'a>)>> {
+  fn parents(&self, key: DefaultKey) -> Option<Vec<(DefaultKey, Scope)>> {
     let mut result = Vec::new();
     let mut idx = key;
     loop {

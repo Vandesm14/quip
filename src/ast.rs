@@ -512,9 +512,10 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
       }
       TokenKind::RightParen => {
         let current = stack.pop();
-        let start_span = spans.pop().unwrap();
+        let start_span = spans.pop();
 
         if let Some(current) = current
+          && let Some(start_span) = start_span
           && let Some(last) = stack.last_mut()
         {
           let expr = Expr {

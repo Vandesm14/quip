@@ -241,6 +241,11 @@ impl Runtime {
                 .error(ErrorReason::Message("defn: invalid name".to_string())),
             );
           };
+          if intrinsics.contains_key(sym.as_ref()) {
+            return Err(self.error(ErrorReason::Message(format!(
+              "'{sym}' is an intrinsic and cannot be redefined"
+            ))));
+          }
           let ExprKind::List(param_list) = &params_expr.kind else {
             return Err(self.error(ErrorReason::Message(
               "defn: expected params list".to_string(),
@@ -266,6 +271,11 @@ impl Runtime {
                   .error(ErrorReason::Message("def: invalid name".to_string())),
               );
             };
+            if intrinsics.contains_key(sym.as_ref()) {
+              return Err(self.error(ErrorReason::Message(format!(
+                "'{sym}' is an intrinsic and cannot be redefined"
+              ))));
+            }
             let val = self.eval_expr(val)?;
             self.context.define(sym.clone(), val.clone());
             Ok(name.clone())

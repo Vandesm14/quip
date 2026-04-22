@@ -117,16 +117,13 @@ impl Runtime {
     };
 
     if call_args.len() != params.len() {
-      return Err(Error {
-        reason: ErrorReason::CallError(CallError {
-          symbol: name.to_owned(),
-          kind: CallErrorKind::IncorrectArity {
-            expected: params.len(),
-            received: call_args.len(),
-          },
-        }),
-        call_stack: self.call_stack.clone(),
-      });
+      return Err(self.error(ErrorReason::CallError(CallError {
+        symbol: name.to_owned(),
+        kind: CallErrorKind::IncorrectArity {
+          expected: params.len(),
+          received: call_args.len(),
+        },
+      })));
     }
 
     self.recur = Some(call_args);

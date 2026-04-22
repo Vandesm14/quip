@@ -47,7 +47,7 @@ impl core::fmt::Display for Error {
         }
 
         let plural = if call_frame.recurs != 1 { "s" } else { "" };
-        writeln!(f, "     ^ recursed {} time{plural}", call_frame.recurs)?;
+        writeln!(f, " ^ recursed {} time{plural}", call_frame.recurs)?;
       } else {
         writeln!(f)?;
       }

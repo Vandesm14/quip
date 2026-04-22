@@ -48,8 +48,7 @@ pub enum Param {
 pub struct Intrinsic {
   pub name: &'static str,
   pub params: &'static [Param],
-  pub handler:
-    fn(&mut Runtime, Vec<Expr>) -> Result<Expr, Error>,
+  pub handler: fn(&mut Runtime, Vec<Expr>) -> Result<Expr, Error>,
 }
 
 impl Intrinsic {
@@ -188,7 +187,9 @@ pub fn intrinsic_add(
       kind: kind.normalize_numeric(),
       span: None,
     }),
-    Err(_) => Err(runtime.error(ErrorReason::Message("'+' requires numeric arguments".to_string()))),
+    Err(_) => Err(runtime.error(ErrorReason::Message(
+      "'+' requires numeric arguments".to_string(),
+    ))),
   }
 }
 
@@ -204,7 +205,9 @@ pub fn intrinsic_sub(
       kind: kind.normalize_numeric(),
       span: None,
     }),
-    Err(_) => Err(runtime.error(ErrorReason::Message("'-' requires numeric arguments".to_string()))),
+    Err(_) => Err(runtime.error(ErrorReason::Message(
+      "'-' requires numeric arguments".to_string(),
+    ))),
   }
 }
 
@@ -220,7 +223,9 @@ pub fn intrinsic_mul(
       kind: kind.normalize_numeric(),
       span: None,
     }),
-    Err(_) => Err(runtime.error(ErrorReason::Message("'*' requires numeric arguments".to_string()))),
+    Err(_) => Err(runtime.error(ErrorReason::Message(
+      "'*' requires numeric arguments".to_string(),
+    ))),
   }
 }
 
@@ -236,10 +241,14 @@ pub fn intrinsic_div(
 
   match &rhs {
     ExprKind::Integer(0) => {
-      return Err(runtime.error(ErrorReason::Message("'/' division by zero".to_string())));
+      return Err(
+        runtime.error(ErrorReason::Message("'/' division by zero".to_string())),
+      );
     }
     ExprKind::Float(f) if *f == 0.0 => {
-      return Err(runtime.error(ErrorReason::Message("'/' division by zero".to_string())));
+      return Err(
+        runtime.error(ErrorReason::Message("'/' division by zero".to_string())),
+      );
     }
     _ => {}
   }
@@ -249,7 +258,9 @@ pub fn intrinsic_div(
       kind: kind.normalize_numeric(),
       span: None,
     }),
-    Err(_) => Err(runtime.error(ErrorReason::Message("'/' requires numeric arguments".to_string()))),
+    Err(_) => Err(runtime.error(ErrorReason::Message(
+      "'/' requires numeric arguments".to_string(),
+    ))),
   }
 }
 
@@ -265,10 +276,14 @@ pub fn intrinsic_mod(
 
   match &rhs {
     ExprKind::Integer(0) => {
-      return Err(runtime.error(ErrorReason::Message("'%' modulo by zero".to_string())));
+      return Err(
+        runtime.error(ErrorReason::Message("'%' modulo by zero".to_string())),
+      );
     }
     ExprKind::Float(f) if *f == 0.0 => {
-      return Err(runtime.error(ErrorReason::Message("'%' modulo by zero".to_string())));
+      return Err(
+        runtime.error(ErrorReason::Message("'%' modulo by zero".to_string())),
+      );
     }
     _ => {}
   }
@@ -278,7 +293,9 @@ pub fn intrinsic_mod(
       kind: kind.normalize_numeric(),
       span: None,
     }),
-    Err(_) => Err(runtime.error(ErrorReason::Message("'%' requires numeric arguments".to_string()))),
+    Err(_) => Err(runtime.error(ErrorReason::Message(
+      "'%' requires numeric arguments".to_string(),
+    ))),
   }
 }
 
@@ -459,7 +476,10 @@ pub fn intrinsic_nth(
   let col_type = col_val.kind.type_name().to_owned();
   match col_val.kind {
     ExprKind::List(items) => items.get(idx).cloned().ok_or_else(|| {
-      runtime.error(ErrorReason::Message(format!("'nth' index {} out of bounds", idx)))
+      runtime.error(ErrorReason::Message(format!(
+        "'nth' index {} out of bounds",
+        idx
+      )))
     }),
     ExprKind::String(s) => s
       .chars()
@@ -469,7 +489,10 @@ pub fn intrinsic_nth(
         span: None,
       })
       .ok_or_else(|| {
-        runtime.error(ErrorReason::Message(format!("'nth' index {} out of bounds", idx)))
+        runtime.error(ErrorReason::Message(format!(
+          "'nth' index {} out of bounds",
+          idx
+        )))
       }),
     _ => Err(runtime.error(ErrorReason::CallError(CallError {
       symbol: "nth".to_owned(),

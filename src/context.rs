@@ -57,6 +57,13 @@ impl Context {
     self.current
   }
 
+  pub fn scope(&self) -> &Scope {
+    self
+      .envs
+      .get(self.current())
+      .expect("there should always be at least one scope")
+  }
+
   pub fn get(&self, name: &str) -> Option<&Expr> {
     let mut idx = self.current;
     loop {

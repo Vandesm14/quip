@@ -2,13 +2,16 @@ use std::rc::Rc;
 
 use crate::{
   ast::{Expr, ExprKind, Span},
-  context::Context,
+  context::{Context, Scope},
 };
 
+// FIXME(leonskij): Rc'ing the fields is a hack to reduce the stack size of the
+//                  Result's produced during evaluation.
 #[derive(Debug, Clone)]
 pub struct Error {
-  pub reason: ErrorReason,
-  pub call_stack: Vec<CallFrame>,
+  pub reason: Rc<ErrorReason>,
+  pub call_stack: Rc<[CallFrame]>,
+  pub scope: Rc<Scope>,
 }
 
 impl core::fmt::Display for Error {
@@ -16,6 +19,15 @@ impl core::fmt::Display for Error {
     const LOCATION_PADDING: usize = 8;
 
     writeln!(f, "{}", self.reason)?;
+
+    writeln!(f)?;
+    writeln!(f, "current scope:")?;
+
+    for (k, v) in &self.scope.vars {
+      writeln!(f, "    - {k:<6} : {v}")?;
+    }
+
+    writeln!(f)?;
     writeln!(f, "call stack:")?;
 
     for call_frame in self.call_stack.iter().rev() {
@@ -443,8 +455,9 @@ impl Runtime {
   #[inline]
   pub(crate) fn error(&self, reason: ErrorReason) -> Error {
     Error {
-      reason,
-      call_stack: self.call_stack.clone(),
+      reason: reason.into(),
+      call_stack: self.call_stack.clone().into(),
+      scope: self.context.scope().clone().into(),
     }
   }
 }

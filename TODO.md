@@ -1,30 +1,3 @@
-- [x] Vars
-  - [x] `defn`
-  - [x] `def`
-  - [x] `set`
-- [x] Arithmetic
-  - [x] `+`
-  - [x] `-`
-  - [x] `*`
-  - [x] `/`
-  - [x] `%`
-- [x] Comparison
-  - [x] `=`
-  - [x] `!=`
-  - [x] `<`
-  - [x] `<=`
-  - [x] `>`
-  - [x] `>=`
-- [x] Boolean Logic
-  - [x] `and`
-  - [x] `or`
-  - [x] `not`
-- [x] List/String
-  - [x] `len`
-  - [x] `nth`
-  - [x] `set-nth`
-  - [x] `push`
-  - [x] `pop`
 - [ ] Record
   - [ ] `insert`
   - [ ] `get`
@@ -42,14 +15,10 @@
   - [x] `list`
   - [ ] `map`
 - [ ] Control Flow
-  - [ ] `if`
+  - [x] `if`
   - [ ] `exit`
-- [ ] I/O & Debugging
-  - [x] `print`
-  - [ ] `debug`
-  - [x] `assert`
 - [ ] Special
-  - [ ] `call`
+  - [x] `call`
   - [x] `eval`
-  - [ ] `recur`
+  - [x] `recur`
   - [ ] `import`

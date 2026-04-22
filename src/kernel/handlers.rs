@@ -401,7 +401,7 @@ fn render_result(expr: &Expr) -> Option<String> {
 }
 
 fn error_ename(err: &crate::run::Error) -> String {
-  match err.reason {
+  match err.reason.as_ref() {
     ErrorReason::CallError(_) => "CallError".to_string(),
     ErrorReason::Message(_) => "RuntimeError".to_string(),
   }

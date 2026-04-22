@@ -9,9 +9,9 @@ use crate::{
 //                  Result's produced during evaluation.
 #[derive(Debug, Clone)]
 pub struct Error {
-  pub reason: Rc<ErrorReason>,
-  pub call_stack: Rc<[CallFrame]>,
-  pub scope: Rc<Scope>,
+  pub reason: Arc<ErrorReason>,
+  pub call_stack: Arc<[CallFrame]>,
+  pub scope: Arc<Scope>,
 }
 
 impl core::fmt::Display for Error {

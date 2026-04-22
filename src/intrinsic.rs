@@ -762,10 +762,25 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
       }
     },
   };
+  const DO: Intrinsic = Intrinsic {
+    name: "do",
+    params: &[Param::Many(ExprType::Any)],
+    handler: |runtime, args| {
+      let result = args.iter().try_fold(
+        Expr {
+          kind: ExprKind::Nil,
+          span: None,
+        },
+        |_, expr| runtime.eval_expr(expr),
+      )?;
+      Ok(result)
+    },
+  };
 
   map.insert("lazy", LAZY);
   map.insert("eval", EVAL);
   map.insert("call", CALL);
+  map.insert("do", DO);
 }
 
 pub fn error_ops(map: &mut HashMap<&'static str, Intrinsic>) {

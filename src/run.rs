@@ -1,9 +1,7 @@
 use std::borrow::Cow;
 
-use slotmap::DefaultKey;
-
 use crate::{
-  ast::{Expr, ExprKind},
+  ast::{Expr, ExprKind, Span},
   context::Context,
 };
 
@@ -45,17 +43,27 @@ pub enum CallErrorKind {
 pub struct Runtime<'a> {
   pub context: Context<'a>,
   pub recur: Option<Vec<Expr<'a>>>,
+  pub call_stack: Vec<CallFrame<'a>>,
 }
 
 impl<'a> Runtime<'a> {
   pub fn call(
     &mut self,
-    closure_env: DefaultKey,
-    params: Vec<Cow<'a, str>>,
-    body: Vec<Expr<'a>>,
+    expr: &Expr<'a>,
     call_args: Vec<Expr<'a>>,
     name: &str,
   ) -> Result<Expr<'a>, Error> {
+    let ExprKind::Function {
+      ref params,
+      ref body,
+      env,
+    } = expr.kind
+    else {
+      unreachable!(
+        "only function expressions can be called but got {expr}; logic bug"
+      );
+    };
+
     if call_args.len() != params.len() {
       return Err(Error::CallError(CallError {
         symbol: name.to_owned(),
@@ -69,7 +77,14 @@ impl<'a> Runtime<'a> {
     self.recur = Some(call_args);
     let mut result = Expr {
       kind: ExprKind::Nil,
+      span: None,
     };
+
+    self.call_stack.push(CallFrame {
+      expr: expr.clone(),
+      call_site: expr.span,
+      recurs: 0,
+    });
 
     while let Some(args) = core::mem::take(&mut self.recur) {
       let mut bound = Vec::new();
@@ -78,11 +93,11 @@ impl<'a> Runtime<'a> {
         bound.push((param.clone(), val));
       }
 
-      let saved = self.context.push_scope(closure_env);
+      let saved = self.context.push_scope(env);
       for (param_name, val) in bound {
         self.context.define(param_name, val);
       }
-      for body_expr in &body {
+      for body_expr in body {
         result = match self.eval_expr(body_expr) {
           Ok(v) => v,
           Err(e) => {
@@ -93,6 +108,9 @@ impl<'a> Runtime<'a> {
       }
 
       self.context.restore_scope(saved);
+
+      let call_frame = self.call_stack.last_mut().unwrap();
+      call_frame.recurs += 1;
     }
 
     Ok(result)
@@ -124,6 +142,11 @@ impl<'a> Runtime<'a> {
       let intrinsics = crate::intrinsic::all();
       if let Some(intrinsic) = intrinsics.get(symbol.as_str()) {
         let args = intrinsic.check_params(self, list, &symbol)?;
+        self.call_stack.push(CallFrame {
+          expr: expr.clone(),
+          call_site: expr.span,
+          recurs: 0,
+        });
         return (intrinsic.handler)(self, args);
       }
 
@@ -141,6 +164,7 @@ impl<'a> Runtime<'a> {
           let env = self.context.current();
           Ok(Expr {
             kind: ExprKind::Function { params, body, env },
+            span: expr.span,
           })
         }
 
@@ -164,6 +188,7 @@ impl<'a> Runtime<'a> {
           let env = self.context.current();
           let func = Expr {
             kind: ExprKind::Function { params, body, env },
+            span: expr.span,
           };
           self.context.define(sym.clone(), func);
           Ok(name.clone())
@@ -209,6 +234,7 @@ impl<'a> Runtime<'a> {
             if !lhs {
               return Ok(Expr {
                 kind: ExprKind::Boolean(false),
+                span: None,
               });
             }
             let rhs = self.eval_expr(rhs)?.kind;
@@ -219,6 +245,7 @@ impl<'a> Runtime<'a> {
             };
             Ok(Expr {
               kind: ExprKind::Boolean(rhs),
+              span: None,
             })
           } else {
             Err(Error::CallError(CallError {
@@ -242,6 +269,7 @@ impl<'a> Runtime<'a> {
             if lhs {
               return Ok(Expr {
                 kind: ExprKind::Boolean(true),
+                span: None,
               });
             }
             let rhs = self.eval_expr(rhs)?.kind;
@@ -252,6 +280,7 @@ impl<'a> Runtime<'a> {
             };
             Ok(Expr {
               kind: ExprKind::Boolean(rhs),
+              span: None,
             })
           } else {
             Err(Error::CallError(CallError {
@@ -268,6 +297,7 @@ impl<'a> Runtime<'a> {
           self.recur = Some(list.get(1..).unwrap_or_default().to_vec());
           Ok(Expr {
             kind: ExprKind::Nil,
+            span: None,
           })
         }
 
@@ -284,11 +314,9 @@ impl<'a> Runtime<'a> {
           let cond = self.eval_expr(cond_expr)?;
           if let ExprKind::Boolean(true) = cond.kind {
             let body = self.eval_expr(body_expr)?;
-            if let ExprKind::Function { params, body, env } = body.kind {
+            if let ExprKind::Function { .. } = body.kind {
               self.call(
-                env,
-                params,
-                body,
+                &body,
                 Vec::new(),
                 &format!("(if {} {})", cond_expr, body_expr),
               )
@@ -298,6 +326,7 @@ impl<'a> Runtime<'a> {
           } else {
             Ok(Expr {
               kind: ExprKind::Nil,
+              span: None,
             })
           }
         }
@@ -308,9 +337,9 @@ impl<'a> Runtime<'a> {
             self.context.get(symbol.as_str()).cloned().ok_or_else(|| {
               Error::Message(format!("undefined '{}'", symbol))
             })?;
-          if let ExprKind::Function { params, body, env } = val.kind {
+          if let ExprKind::Function { .. } = val.kind {
             let call_args = list.get(1..).unwrap_or(&[]);
-            self.call(env, params, body, call_args.to_vec(), symbol.as_ref())
+            self.call(&val, call_args.to_vec(), symbol.as_ref())
           } else {
             Err(Error::Message(format!("'{}' is not a function", symbol)))
           }
@@ -329,6 +358,13 @@ impl<'a> Runtime<'a> {
   }
 }
 
+#[derive(Debug, Clone)]
+pub struct CallFrame<'a> {
+  pub expr: Expr<'a>,
+  pub call_site: Option<Span>,
+  pub recurs: usize,
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -340,6 +376,7 @@ mod tests {
     let mut runtime = Runtime::default();
     let mut last = Expr {
       kind: ExprKind::Nil,
+      span: None,
     };
     for expr in &exprs {
       last = runtime.eval_expr(expr).map_err(|e| e.to_string())?;
@@ -362,6 +399,7 @@ mod tests {
     let exprs = parse(source, tokens).unwrap();
     let mut last = Expr {
       kind: ExprKind::Nil,
+      span: None,
     };
     for expr in &exprs {
       last = runtime.eval_expr(expr).unwrap();

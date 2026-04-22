@@ -185,6 +185,7 @@ pub fn intrinsic_add<'a>(
   match lhs + rhs {
     Ok(kind) => Ok(Expr {
       kind: kind.normalize_numeric(),
+      span: None,
     }),
     Err(_) => Err(Error::Message("'+' requires numeric arguments".to_string())),
   }
@@ -200,6 +201,7 @@ pub fn intrinsic_sub<'a>(
   match lhs - rhs {
     Ok(kind) => Ok(Expr {
       kind: kind.normalize_numeric(),
+      span: None,
     }),
     Err(_) => Err(Error::Message("'-' requires numeric arguments".to_string())),
   }
@@ -215,6 +217,7 @@ pub fn intrinsic_mul<'a>(
   match lhs * rhs {
     Ok(kind) => Ok(Expr {
       kind: kind.normalize_numeric(),
+      span: None,
     }),
     Err(_) => Err(Error::Message("'*' requires numeric arguments".to_string())),
   }
@@ -243,6 +246,7 @@ pub fn intrinsic_div<'a>(
   match lhs / rhs {
     Ok(kind) => Ok(Expr {
       kind: kind.normalize_numeric(),
+      span: None,
     }),
     Err(_) => Err(Error::Message("'/' requires numeric arguments".to_string())),
   }
@@ -271,6 +275,7 @@ pub fn intrinsic_mod<'a>(
   match lhs % rhs {
     Ok(kind) => Ok(Expr {
       kind: kind.normalize_numeric(),
+      span: None,
     }),
     Err(_) => Err(Error::Message("'%' requires numeric arguments".to_string())),
   }
@@ -289,6 +294,7 @@ pub fn intrinsic_eq<'a>(
   let (lhs, rhs) = lhs.coerce_numeric(rhs);
   Ok(Expr {
     kind: ExprKind::Boolean(lhs == rhs),
+    span: None,
   })
 }
 
@@ -303,6 +309,7 @@ pub fn intrinsic_neq<'a>(
   let (lhs, rhs) = lhs.coerce_numeric(rhs);
   Ok(Expr {
     kind: ExprKind::Boolean(lhs != rhs),
+    span: None,
   })
 }
 
@@ -318,6 +325,7 @@ pub fn intrinsic_lt<'a>(
   match lhs.partial_cmp(&rhs) {
     Some(ord) => Ok(Expr {
       kind: ExprKind::Boolean(ord.is_lt()),
+      span: None,
     }),
     None => Err(Error::Message(
       "'<' requires comparable arguments".to_string(),
@@ -337,6 +345,7 @@ pub fn intrinsic_lte<'a>(
   match lhs.partial_cmp(&rhs) {
     Some(ord) => Ok(Expr {
       kind: ExprKind::Boolean(ord.is_le()),
+      span: None,
     }),
     None => Err(Error::Message(
       "'<=' requires comparable arguments".to_string(),
@@ -356,6 +365,7 @@ pub fn intrinsic_gt<'a>(
   match lhs.partial_cmp(&rhs) {
     Some(ord) => Ok(Expr {
       kind: ExprKind::Boolean(ord.is_gt()),
+      span: None,
     }),
     None => Err(Error::Message(
       "'>' requires comparable arguments".to_string(),
@@ -375,6 +385,7 @@ pub fn intrinsic_gte<'a>(
   match lhs.partial_cmp(&rhs) {
     Some(ord) => Ok(Expr {
       kind: ExprKind::Boolean(ord.is_ge()),
+      span: None,
     }),
     None => Err(Error::Message(
       "'>=' requires comparable arguments".to_string(),
@@ -398,6 +409,7 @@ pub fn intrinsic_not<'a>(
   };
   Ok(Expr {
     kind: ExprKind::Boolean(!b),
+    span: None,
   })
 }
 
@@ -415,6 +427,7 @@ pub fn intrinsic_list<'a>(
     .collect::<Result<Vec<_>, _>>()?;
   Ok(Expr {
     kind: ExprKind::List(Arc::new(evaluated)),
+    span: None,
   })
 }
 
@@ -452,6 +465,7 @@ pub fn intrinsic_nth<'a>(
       .nth(idx)
       .map(|ch| Expr {
         kind: ExprKind::String(ch.to_string()),
+        span: None,
       })
       .ok_or_else(|| {
         Error::Message(format!("'nth' index {} out of bounds", idx))
@@ -514,6 +528,7 @@ pub fn intrinsic_set_nth<'a>(
   new_items[idx] = new_val;
   Ok(Expr {
     kind: ExprKind::List(Arc::new(new_items)),
+    span: None,
   })
 }
 
@@ -541,6 +556,7 @@ pub fn intrinsic_push<'a>(
   new_items.push(new_val);
   Ok(Expr {
     kind: ExprKind::List(Arc::new(new_items)),
+    span: None,
   })
 }
 
@@ -572,6 +588,7 @@ pub fn intrinsic_pop<'a>(
   let new_items = items[..items.len() - 1].to_vec();
   Ok(Expr {
     kind: ExprKind::List(Arc::new(new_items)),
+    span: None,
   })
 }
 
@@ -587,9 +604,11 @@ pub fn intrinsic_len<'a>(
   match val {
     ExprKind::String(s) => Ok(Expr {
       kind: ExprKind::Integer(s.len() as i64),
+      span: None,
     }),
     ExprKind::List(list) => Ok(Expr {
       kind: ExprKind::Integer(list.len() as i64),
+      span: None,
     }),
     _ => Err(Error::Message(
       "'len' requires one string or list argument".to_string(),
@@ -606,6 +625,7 @@ pub fn intrinsic_typeof<'a>(
   let val = args[0].kind.clone();
   Ok(Expr {
     kind: ExprKind::String(val.type_name().to_string()),
+    span: None,
   })
 }
 
@@ -622,6 +642,7 @@ pub fn intrinsic_print<'a>(
   println!("{}", parts.join(" "));
   Ok(Expr {
     kind: ExprKind::Nil,
+    span: None,
   })
 }
 
@@ -642,6 +663,7 @@ pub fn intrinsic_to_string<'a>(
 
   Ok(Expr {
     kind: ExprKind::String(args[0].to_string()),
+    span: None,
   })
 }
 
@@ -670,15 +692,15 @@ pub fn intrinsic_call<'a>(
 
   // First arg is unevaluated - evaluate it to get the function
   let fn_expr = runtime.eval_expr(&args[0])?;
-  if let ExprKind::Function { params, body, env } = fn_expr.kind {
+  if let ExprKind::Function { .. } = &fn_expr.kind {
     // It's a function - call it with the rest of the arguments
     runtime.call(
-      env,
-      params,
-      body,
+      &fn_expr,
       args.get(1..).unwrap_or_default().to_vec(),
       "(call ...)",
     )
+  // TODO(thedevbird): Have a look at this since you're not sure whether this is
+  //                   really what you want.
   } else if let ExprKind::List(list) = &fn_expr.kind {
     // It's a list - try to evaluate it as a function call
     // Add the rest of the arguments and evaluate
@@ -688,6 +710,7 @@ pub fn intrinsic_call<'a>(
     }
     runtime.eval_expr(&Expr {
       kind: ExprKind::List(Arc::new(new_list)),
+      span: None,
     })
   } else {
     Ok(fn_expr)
@@ -704,6 +727,7 @@ pub fn intrinsic_try<'a>(
     Ok(result) => Ok(result),
     Err(err) => Ok(Expr {
       kind: ExprKind::Error(err.to_string().into()),
+      span: None,
     }),
   }
 }
@@ -717,6 +741,7 @@ pub fn intrinsic_error<'a>(
   let inner = args[0].clone();
   Ok(Expr {
     kind: ExprKind::Error(Error::Message(inner.to_string())),
+    span: None,
   })
 }
 

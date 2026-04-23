@@ -452,6 +452,8 @@ impl Runtime {
                 if let ExprKind::Function { .. } = val.kind {
                   let call_args = list.get(1..).unwrap_or(&[]);
                   self.call(&val, call_args.to_vec(), symbol.as_ref())
+                } else if let ExprKind::Form(..) = val.kind {
+                  self.eval_expr(&val)
                 } else {
                   Err(self.error(ErrorReason::Message(format!(
                     "'{}' is not a function",

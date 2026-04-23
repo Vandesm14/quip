@@ -435,6 +435,68 @@ pub fn comparison(map: &mut HashMap<&'static str, Intrinsic>) {
 }
 
 pub fn boolean(map: &mut HashMap<&'static str, Intrinsic>) {
+  const AND: Intrinsic = Intrinsic {
+    name: "and",
+    params: &[Param::One(ExprType::Any), Param::One(ExprType::Any)],
+    handler: |runtime, args| {
+      let [lhs, rhs] = args.get(0..2).unwrap() else {
+        unreachable!("handled by type-checker")
+      };
+      let lhs = runtime.eval_expr(lhs)?.kind;
+      let ExprKind::Boolean(lhs) = lhs else {
+        return Err(runtime.error(ErrorReason::Message(
+          "'and' requires boolean arguments".to_string(),
+        )));
+      };
+      if !lhs {
+        return Ok(Expr {
+          kind: ExprKind::Boolean(false),
+          span: None,
+        });
+      }
+      let rhs = runtime.eval_expr(rhs)?.kind;
+      let ExprKind::Boolean(rhs) = rhs else {
+        return Err(runtime.error(ErrorReason::Message(
+          "'and' requires boolean arguments".to_string(),
+        )));
+      };
+      Ok(Expr {
+        kind: ExprKind::Boolean(rhs),
+        span: None,
+      })
+    },
+  };
+  const OR: Intrinsic = Intrinsic {
+    name: "or",
+    params: &[Param::One(ExprType::Any), Param::One(ExprType::Any)],
+    handler: |runtime, args| {
+      let [lhs, rhs] = args.get(0..2).unwrap() else {
+        unreachable!("handled by type-checker")
+      };
+      let lhs = runtime.eval_expr(lhs)?.kind;
+      let ExprKind::Boolean(lhs) = lhs else {
+        return Err(runtime.error(ErrorReason::Message(
+          "'or' requires boolean arguments".to_string(),
+        )));
+      };
+      if lhs {
+        return Ok(Expr {
+          kind: ExprKind::Boolean(true),
+          span: None,
+        });
+      }
+      let rhs = runtime.eval_expr(rhs)?.kind;
+      let ExprKind::Boolean(rhs) = rhs else {
+        return Err(runtime.error(ErrorReason::Message(
+          "'or' requires boolean arguments".to_string(),
+        )));
+      };
+      Ok(Expr {
+        kind: ExprKind::Boolean(rhs),
+        span: None,
+      })
+    },
+  };
   const NOT: Intrinsic = Intrinsic {
     name: "not",
     params: &[Param::EvalTo(ExprType::Boolean)],
@@ -452,6 +514,8 @@ pub fn boolean(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
 
+  map.insert("and", AND);
+  map.insert("or", OR);
   map.insert("not", NOT);
 }
 

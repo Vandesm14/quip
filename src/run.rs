@@ -208,7 +208,7 @@ impl Runtime {
   }
 
   pub fn eval_expr(&mut self, expr: &Expr) -> Result<Expr, Error> {
-    if let ExprKind::List(list) = &expr.kind
+    if let ExprKind::Form(list) = &expr.kind
       && let Some(ExprKind::Symbol(sym)) = list.first().map(|e| &e.kind)
     {
       let symbol = sym.to_string();
@@ -229,7 +229,7 @@ impl Runtime {
 
       match symbol.as_str() {
         "fn" => {
-          // (fn (params...) body...)
+          // (fn [params...] body...) -> function
           let Some(params_expr) = list.get(1) else {
             return Err(self.error(ErrorReason::Message(
               "fn: expected params list".to_string(),
@@ -251,7 +251,7 @@ impl Runtime {
         }
 
         "defn" => {
-          // (defn name (params...) body...)  →  (def name (fn (params...) body...))
+          // (defn name [params...] body...)  →  (def name (fn [params...] body...))
           let Some([name, params_expr]) = list.get(1..3) else {
             return Err(self.error(ErrorReason::Message(
               "defn: expected name and params".to_string(),
@@ -1159,18 +1159,18 @@ mod tests {
 
         #[test]
         fn len_of_empty_list() {
-          assert_eq!(run("(len ())").unwrap().kind, ExprKind::Integer(0));
+          assert_eq!(run("(len [])").unwrap().kind, ExprKind::Integer(0));
         }
 
         #[test]
         fn len_of_list_with_integers() {
-          assert_eq!(run("(len (1 2 3))").unwrap().kind, ExprKind::Integer(3));
+          assert_eq!(run("(len [1 2 3])").unwrap().kind, ExprKind::Integer(3));
         }
 
         #[test]
         fn len_of_list_with_mixed_types() {
           assert_eq!(
-            run("(len (1 \"hello\" true))").unwrap().kind,
+            run("(len [1 \"hello\" true])").unwrap().kind,
             ExprKind::Integer(3)
           );
         }
@@ -1243,26 +1243,26 @@ mod tests {
       }
 
       #[test]
-      fn typeof_list() {
-        let result = run("(typeof (1 2 3))").unwrap();
-        assert_eq!(result.kind, ExprKind::String("list".to_string()));
+      fn typeof_form() {
+        let result = run("(typeof ())").unwrap();
+        assert_eq!(result.kind, ExprKind::String("form".to_string()));
       }
 
       #[test]
-      fn typeof_empty_list() {
-        let result = run("(typeof ())").unwrap();
+      fn typeof_list() {
+        let result = run("(typeof [])").unwrap();
         assert_eq!(result.kind, ExprKind::String("list".to_string()));
       }
 
       #[test]
       fn typeof_function() {
-        let result = run("(typeof (fn () 42))").unwrap();
+        let result = run("(typeof (fn [] 42))").unwrap();
         assert_eq!(result.kind, ExprKind::String("function".to_string()));
       }
 
       #[test]
       fn typeof_of_defined_function() {
-        let result = run("(defn foo () 42) (typeof foo)").unwrap();
+        let result = run("(defn foo [] 42) (typeof foo)").unwrap();
         assert_eq!(result.kind, ExprKind::String("function".to_string()));
       }
 
@@ -1439,31 +1439,31 @@ mod tests {
 
       #[test]
       fn nth_first_element_of_list() {
-        let result = run("(nth 0 (list 1 2 3))").unwrap();
+        let result = run("(nth 0 [1 2 3])").unwrap();
         assert_eq!(result.kind, ExprKind::Integer(1));
       }
 
       #[test]
       fn nth_middle_element_of_list() {
-        let result = run("(nth 1 (list 1 2 3))").unwrap();
+        let result = run("(nth 1 [1 2 3])").unwrap();
         assert_eq!(result.kind, ExprKind::Integer(2));
       }
 
       #[test]
       fn nth_last_element_of_list() {
-        let result = run("(nth 2 (list 1 2 3))").unwrap();
+        let result = run("(nth 2 [1 2 3])").unwrap();
         assert_eq!(result.kind, ExprKind::Integer(3));
       }
 
       #[test]
       fn nth_out_of_bounds() {
-        let result = run("(nth 3 (list 1 2 3))");
+        let result = run("(nth 3 [1 2 3])");
         assert!(result.is_err());
       }
 
       #[test]
       fn nth_negative_index() {
-        let result = run("(nth -1 (list 1 2 3))");
+        let result = run("(nth -1 [1 2 3])");
         assert!(result.is_err());
       }
 
@@ -1493,7 +1493,7 @@ mod tests {
 
       #[test]
       fn nth_requires_integer_index() {
-        let result = run("(nth \"a\" (list 1 2 3))");
+        let result = run("(nth \"a\" [1 2 3])");
         assert!(result.is_err());
       }
 
@@ -1509,7 +1509,7 @@ mod tests {
 
       #[test]
       fn set_nth_first_element() {
-        let result = run("(set-nth 0 (list 1 2 3) 0)").unwrap();
+        let result = run("(set-nth 0 [1 2 3] 0)").unwrap();
         if let ExprKind::List(items) = result.kind {
           assert_eq!(items.len(), 3);
           assert_eq!(items[0].kind, ExprKind::Integer(0));
@@ -1522,7 +1522,7 @@ mod tests {
 
       #[test]
       fn set_nth_middle_element() {
-        let result = run("(set-nth 1 (list 1 2 3) 0)").unwrap();
+        let result = run("(set-nth 1 [1 2 3] 0)").unwrap();
         if let ExprKind::List(items) = result.kind {
           assert_eq!(items.len(), 3);
           assert_eq!(items[0].kind, ExprKind::Integer(1));
@@ -1535,7 +1535,7 @@ mod tests {
 
       #[test]
       fn set_nth_last_element() {
-        let result = run("(set-nth 2 (list 1 2 3) 0)").unwrap();
+        let result = run("(set-nth 2 [1 2 3] 0)").unwrap();
         if let ExprKind::List(items) = result.kind {
           assert_eq!(items.len(), 3);
           assert_eq!(items[0].kind, ExprKind::Integer(1));
@@ -1548,19 +1548,19 @@ mod tests {
 
       #[test]
       fn set_nth_out_of_bounds() {
-        let result = run("(set-nth 5 (list 1 2 3) 0)");
+        let result = run("(set-nth 5 [1 2 3] 0)");
         assert!(result.is_err());
       }
 
       #[test]
       fn set_nth_negative_index() {
-        let result = run("(set-nth -1 (list 1 2 3) 0)");
+        let result = run("(set-nth -1 [1 2 3] 0)");
         assert!(result.is_err());
       }
 
       #[test]
       fn set_nth_with_different_type() {
-        let result = run("(set-nth 0 (list 1 2 3) \"hello\")").unwrap();
+        let result = run("(set-nth 0 [1 2 3] \"hello\")").unwrap();
         if let ExprKind::List(items) = result.kind {
           assert_eq!(items[0].kind, ExprKind::String("hello".to_string()));
         } else {
@@ -1570,7 +1570,7 @@ mod tests {
 
       #[test]
       fn set_nth_requires_three_arguments() {
-        let result = run("(set-nth 0 (list 1 2 3))");
+        let result = run("(set-nth 0 [1 2 3])");
         assert!(result.is_err());
       }
 
@@ -1582,7 +1582,7 @@ mod tests {
 
       #[test]
       fn set_nth_requires_integer_index() {
-        let result = run("(set-nth \"a\" (list 1 2 3) 0)");
+        let result = run("(set-nth \"a\" [1 2 3] 0)");
         assert!(result.is_err());
       }
     }
@@ -1592,7 +1592,7 @@ mod tests {
 
       #[test]
       fn push_to_empty_list() {
-        let result = run("(push (list) 42)").unwrap();
+        let result = run("(push [] 42)").unwrap();
         if let ExprKind::List(items) = result.kind {
           assert_eq!(items.len(), 1);
           assert_eq!(items[0].kind, ExprKind::Integer(42));
@@ -1603,7 +1603,7 @@ mod tests {
 
       #[test]
       fn push_to_non_empty_list() {
-        let result = run("(push (list 1 2 3) 42)").unwrap();
+        let result = run("(push [1 2 3] 42)").unwrap();
         if let ExprKind::List(items) = result.kind {
           assert_eq!(items.len(), 4);
           assert_eq!(items[0].kind, ExprKind::Integer(1));
@@ -1617,7 +1617,7 @@ mod tests {
 
       #[test]
       fn push_multiple_values() {
-        let result = run("(push (push (list 1) 2) 3)").unwrap();
+        let result = run("(push (push [1] 2) 3)").unwrap();
         if let ExprKind::List(items) = result.kind {
           assert_eq!(items.len(), 3);
           assert_eq!(items[0].kind, ExprKind::Integer(1));
@@ -1630,7 +1630,7 @@ mod tests {
 
       #[test]
       fn push_different_type() {
-        let result = run("(push (list 1 2) \"hello\")").unwrap();
+        let result = run("(push [1 2] \"hello\")").unwrap();
         if let ExprKind::List(items) = result.kind {
           assert_eq!(items.len(), 3);
           assert_eq!(items[0].kind, ExprKind::Integer(1));
@@ -1643,7 +1643,7 @@ mod tests {
 
       #[test]
       fn push_requires_two_arguments() {
-        let result = run("(push (list 1))");
+        let result = run("(push [1])");
         assert!(result.is_err());
       }
 
@@ -1655,7 +1655,7 @@ mod tests {
 
       #[test]
       fn push_with_expression() {
-        let result = run("(push (list 1 2) (+ 3 4))").unwrap();
+        let result = run("(push [1 2] (+ 3 4))").unwrap();
         if let ExprKind::List(items) = result.kind {
           assert_eq!(items.len(), 3);
           assert_eq!(items[2].kind, ExprKind::Integer(7));
@@ -1670,7 +1670,7 @@ mod tests {
 
       #[test]
       fn pop_from_single_element_list() {
-        let result = run("(pop (list 1))").unwrap();
+        let result = run("(pop [1])").unwrap();
         if let ExprKind::List(items) = result.kind {
           assert_eq!(items.len(), 0);
         } else {
@@ -1680,7 +1680,7 @@ mod tests {
 
       #[test]
       fn pop_from_multi_element_list() {
-        let result = run("(pop (list 1 2 3))").unwrap();
+        let result = run("(pop [1 2 3])").unwrap();
         if let ExprKind::List(items) = result.kind {
           assert_eq!(items.len(), 2);
           assert_eq!(items[0].kind, ExprKind::Integer(1));
@@ -1692,7 +1692,7 @@ mod tests {
 
       #[test]
       fn pop_multiple_times() {
-        let result = run("(pop (pop (list 1 2 3)))").unwrap();
+        let result = run("(pop (pop [1 2 3]))").unwrap();
         if let ExprKind::List(items) = result.kind {
           assert_eq!(items.len(), 1);
           assert_eq!(items[0].kind, ExprKind::Integer(1));
@@ -1726,19 +1726,19 @@ mod tests {
 
     #[test]
     fn call_thunk_calls_zero_arg_fn() {
-      let result = run("(call (fn () 42))").unwrap();
+      let result = run("(call (fn [] 42))").unwrap();
       assert_eq!(result.kind, ExprKind::Integer(42));
     }
 
     #[test]
     fn call_thunk_calls_one_arg_fn() {
-      let result = run("(call (fn (a) a) 2)").unwrap();
+      let result = run("(call (fn [a] a) 2)").unwrap();
       assert_eq!(result.kind, ExprKind::Integer(2));
     }
 
     #[test]
     fn call_thunk_calls_one_arg_fn_err() {
-      let result = run("(call (fn (a) a))");
+      let result = run("(call (fn [a] a))");
       assert!(result.is_err());
     }
 
@@ -1750,7 +1750,7 @@ mod tests {
 
     #[test]
     fn call_fn_from_var() {
-      let result = run("(def t (fn () 1)) (call t)").unwrap();
+      let result = run("(def t (fn [] 1)) (call t)").unwrap();
       assert_eq!(result.kind, ExprKind::Integer(1));
     }
 
@@ -1769,14 +1769,14 @@ mod tests {
     #[test]
     fn call_double_fn() {
       let result =
-        run("(def a 0) (call (fn () (set a 1) (fn () (set a 2)))) a").unwrap();
+        run("(def a 0) (call (fn [] (set a 1) (fn [] (set a 2)))) a").unwrap();
       assert_eq!(result.kind, ExprKind::Integer(1));
     }
 
     #[test]
     fn call_double_fn_from_var() {
       let result =
-        run("(def a 0) (def t (fn () (set a 1) (fn () (set a 2)))) (call t) a")
+        run("(def a 0) (def t (fn [] (set a 1) (fn [] (set a 2)))) (call t) a")
           .unwrap();
       assert_eq!(result.kind, ExprKind::Integer(1));
     }
@@ -1800,7 +1800,7 @@ mod tests {
     #[test]
     fn test_lazy_lists() {
       let result = run("'(+ 1 2)").unwrap();
-      if let ExprKind::List(items) = result.kind {
+      if let ExprKind::Form(items) = result.kind {
         assert_eq!(items.len(), 3);
         assert_eq!(items[0].kind, ExprKind::Symbol("+".into()));
         assert_eq!(items[1].kind, ExprKind::Integer(1));
@@ -1812,8 +1812,8 @@ mod tests {
 
     #[test]
     fn test_lazy_nested_lists() {
-      let result = run("'(+ (1 2))").unwrap();
-      if let ExprKind::List(items) = result.kind {
+      let result = run("'(+ [1 2])").unwrap();
+      if let ExprKind::Form(items) = result.kind {
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].kind, ExprKind::Symbol("+".into()));
         if let ExprKind::List(ref items) =
@@ -1860,7 +1860,7 @@ mod tests {
 
     #[test]
     fn function_scopes_are_isolated() {
-      let source: &'static str = "((fn () (def a 0)))";
+      let source: &'static str = "((fn [] (def a 0)))";
       let runtime = run_runtime(source);
       assert!(runtime.context.get("a").is_none());
     }
@@ -1870,9 +1870,9 @@ mod tests {
       let result = run(
         "
       (def a 0)
-      ((fn ()
+      ((fn []
         (def a 1)
-        ((fn () (def a 2)))))
+        ((fn [] (def a 2)))))
       a
     ",
       )
@@ -1885,7 +1885,7 @@ mod tests {
       let result = run(
         "
       (def a 0)
-      (defn f () (set a 1))
+      (defn f [] (set a 1))
       (f)
       a
     ",
@@ -1899,9 +1899,9 @@ mod tests {
       let result = run(
         "
       (def a 0)
-      (defn outer ()
+      (defn outer []
         (def a 1)
-        (fn () a))
+        (fn [] a))
       (call (outer))
     ",
       )
@@ -1914,9 +1914,9 @@ mod tests {
       let result = run(
         "
       (def a 0)
-      (defn outer ()
+      (defn outer []
         (def a 1)
-        (fn () (set a 2) a))
+        (fn [] (set a 2) a))
       (call (outer))
     ",
       )
@@ -1929,8 +1929,8 @@ mod tests {
       let result = run(
         "
       (def a 0)
-      (defn f () a)
-      (defn shadow () (def a 1) (f))
+      (defn f [] a)
+      (defn shadow [] (def a 1) (f))
       (shadow)
     ",
       )
@@ -1943,8 +1943,8 @@ mod tests {
       let result = run(
         "
       (def a 0)
-      (defn f () a)
-      (defn caller () (def a 1) (f))
+      (defn f [] a)
+      (defn caller [] (def a 1) (f))
       (caller)
     ",
       )
@@ -1956,9 +1956,9 @@ mod tests {
     fn closures_share_mutable_state_across_calls() {
       let result = run(
         "
-      (defn make-counter ()
+      (defn make-counter []
         (def n 0)
-        (fn () (set n (+ n 1)) n))
+        (fn [] (set n (+ n 1)) n))
       (def c (make-counter))
       (c)
       (c)
@@ -1973,11 +1973,11 @@ mod tests {
     fn for_each_pattern_uses_lexical_scope() {
       let result = run(
         "
-      (defn for-test (each)
+      (defn for-test [each]
         (def el 999)
         (each 1))
       (def el 0)
-      (for-test (fn (x) (set el x)))
+      (for-test (fn [x] (set el x)))
       el
     ",
       )
@@ -1997,7 +1997,7 @@ mod tests {
       };
       assert!(!runtime.context.should_gc());
 
-      eval_source(&mut runtime, "((fn () nil)) ((fn () nil))");
+      eval_source(&mut runtime, "((fn [] nil)) ((fn [] nil))");
       assert!(!runtime.context.should_gc());
     }
 
@@ -2009,13 +2009,13 @@ mod tests {
       };
       assert!(!runtime.context.should_gc());
 
-      eval_source(&mut runtime, "(call (fn () nil))");
+      eval_source(&mut runtime, "(call (fn [] nil))");
       assert!(!runtime.context.should_gc());
 
-      eval_source(&mut runtime, "(call (fn () nil))");
+      eval_source(&mut runtime, "(call (fn [] nil))");
       assert!(runtime.context.should_gc());
 
-      eval_source(&mut runtime, "(call (fn () nil))");
+      eval_source(&mut runtime, "(call (fn [] nil))");
       assert!(runtime.context.should_gc());
     }
 
@@ -2025,7 +2025,7 @@ mod tests {
 
       eval_source(
         &mut runtime,
-        "(call (fn () nil)) (call (fn () nil)) (call (fn () nil)) (call (fn () nil))",
+        "(call (fn [] nil)) (call (fn [] nil)) (call (fn [] nil)) (call (fn [] nil))",
       );
       assert_eq!(runtime.context.envs_len(), 5);
 
@@ -2040,9 +2040,9 @@ mod tests {
       eval_source(
         &mut runtime,
         "
-      (defn make-counter ()
+      (defn make-counter []
         (def n 0)
-        (fn () (set n (+ n 1)) n))
+        (fn [] (set n (+ n 1)) n))
       (def c (make-counter))
       ",
       );
@@ -2058,7 +2058,7 @@ mod tests {
     fn gc_preserves_root_scope() {
       let mut runtime = Runtime::default();
 
-      eval_source(&mut runtime, "(def x 42) ((fn () nil)) ((fn () nil))");
+      eval_source(&mut runtime, "(def x 42) ((fn [] nil)) ((fn [] nil))");
       runtime.context.trigger_gc();
 
       let result = eval_source(&mut runtime, "x");
@@ -2072,9 +2072,9 @@ mod tests {
       eval_source(
         &mut runtime,
         "
-      (defn make-counter ()
+      (defn make-counter []
         (def n 0)
-        (fn () (set n (+ n 1)) n))
+        (fn [] (set n (+ n 1)) n))
       (def c (make-counter))
       ",
       );
@@ -2082,7 +2082,7 @@ mod tests {
       // Fill envs with unrelated call scopes that should be collectible.
       eval_source(
         &mut runtime,
-        "((fn () nil)) ((fn () nil)) ((fn () nil)) ((fn () nil))",
+        "((fn [] nil)) ((fn [] nil)) ((fn [] nil)) ((fn [] nil))",
       );
 
       runtime.context.trigger_gc();
@@ -2104,17 +2104,17 @@ mod tests {
       eval_source(
         &mut runtime,
         "
-      (defn outer ()
+      (defn outer []
         (def a 10)
-        (defn middle ()
+        (defn middle []
           (def b 20)
-          (fn () (+ a b)))
+          (fn [] (+ a b)))
         (middle))
       (def f (outer))
       ",
       );
 
-      eval_source(&mut runtime, "((fn () nil)) ((fn () nil))");
+      eval_source(&mut runtime, "((fn [] nil)) ((fn [] nil))");
       runtime.context.trigger_gc();
 
       let r = eval_source(&mut runtime, "(f)");
@@ -2130,10 +2130,10 @@ mod tests {
         "
       (def pair-inc nil)
       (def pair-get nil)
-      (defn make-pair ()
+      (defn make-pair []
         (def n 0)
-        (set pair-inc (fn () (set n (+ n 1)) n))
-        (set pair-get (fn () n)))
+        (set pair-inc (fn [] (set n (+ n 1)) n))
+        (set pair-get (fn [] n)))
       (make-pair)
       ",
       );
@@ -2153,9 +2153,9 @@ mod tests {
       eval_source(
         &mut runtime,
         "
-      (defn make-counter ()
+      (defn make-counter []
         (def n 0)
-        (fn () (set n (+ n 1)) n))
+        (fn [] (set n (+ n 1)) n))
       (def c (make-counter))
       ",
       );

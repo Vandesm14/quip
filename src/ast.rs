@@ -82,6 +82,8 @@ pub enum TokenKind {
 
   LeftParen,
   RightParen,
+  LeftSquare,
+  RightSquare,
 
   Lazy,
 
@@ -102,6 +104,8 @@ impl fmt::Display for TokenKind {
 
       Self::LeftParen => write!(f, "'('"),
       Self::RightParen => write!(f, "')'"),
+      Self::LeftSquare => write!(f, "'['"),
+      Self::RightSquare => write!(f, "']'"),
 
       Self::Integer => write!(f, "an integer literal"),
       Self::Float => write!(f, "a float literal"),
@@ -178,6 +182,12 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
         TokenKind::Eof => unimplemented!("should never be EOF"),
         TokenKind::LeftParen => unreachable!("parens are single chars"),
         TokenKind::RightParen => unreachable!("parens are single chars"),
+        TokenKind::LeftSquare => {
+          unreachable!("square brackets are single chars")
+        }
+        TokenKind::RightSquare => {
+          unreachable!("square brackets are single chars")
+        }
         TokenKind::Lazy => unreachable!("lazy is a single char"),
       }
     }
@@ -203,6 +213,10 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
         tokens.push(Token::new(TokenKind::LeftParen, i, i + 1, line, column));
       } else if char == ')' {
         tokens.push(Token::new(TokenKind::RightParen, i, i + 1, line, column));
+      } else if char == '[' {
+        tokens.push(Token::new(TokenKind::LeftSquare, i, i + 1, line, column));
+      } else if char == ']' {
+        tokens.push(Token::new(TokenKind::RightSquare, i, i + 1, line, column));
       } else if char == ':' {
         current = Some(Token::begin(TokenKind::Keyword, i + 1, line, column));
       } else if char.is_alphabetic() || SYMBOL_CHARS.contains(&char) {
@@ -238,7 +252,7 @@ impl core::fmt::Display for Expr {
   }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum ExprKind {
   #[default]
   Nil,
@@ -254,6 +268,7 @@ pub enum ExprKind {
   Boolean(bool),
 
   List(Rc<Vec<Expr>>),
+  Form(Rc<Vec<Expr>>),
   Map(HashMap<Rc<str>, Expr>),
 
   Function {
@@ -306,6 +321,7 @@ impl ExprKind {
       ExprKind::Integer(..) => "integer",
       ExprKind::Boolean(..) => "boolean",
       ExprKind::List(..) => "list",
+      ExprKind::Form(..) => "form",
       ExprKind::Map(..) => "map",
       ExprKind::Function { .. } => "function",
     }
@@ -324,6 +340,9 @@ impl core::fmt::Display for ExprKind {
       ExprKind::Float(float) => write!(f, "{}", float),
       ExprKind::Integer(integer) => write!(f, "{}", integer),
       ExprKind::List(exprs) => {
+        write!(f, "[{}]", exprs.iter().map(|e| e.to_string()).join(" "))
+      }
+      ExprKind::Form(exprs) => {
         write!(f, "({})", exprs.iter().map(|e| e.to_string()).join(" "))
       }
       ExprKind::Map(_) => todo!(),
@@ -335,44 +354,6 @@ impl core::fmt::Display for ExprKind {
           body.iter().join(" ")
         )
       }
-    }
-  }
-}
-
-impl PartialEq for ExprKind {
-  fn eq(&self, other: &Self) -> bool {
-    match (self, other) {
-      (Self::Nil, Self::Nil) => true,
-
-      (Self::Boolean(lhs), Self::Boolean(rhs)) => lhs == rhs,
-
-      (Self::String(lhs), Self::String(rhs)) => lhs == rhs,
-      (Self::Keyword(lhs), Self::Keyword(rhs)) => lhs == rhs,
-      (Self::Symbol(lhs), Self::Symbol(rhs)) => lhs == rhs,
-      (Self::Error(lhs), Self::Error(rhs)) => lhs == rhs,
-
-      (Self::Float(lhs), Self::Float(rhs)) => lhs == rhs,
-      (Self::Integer(lhs), Self::Integer(rhs)) => lhs == rhs,
-
-      (Self::List(lhs), Self::List(rhs)) => lhs == rhs,
-      (Self::Map(lhs), Self::Map(rhs)) => lhs == rhs,
-
-      (
-        Self::Function {
-          params: lhs_params,
-          body: lhs_body,
-          env: lhs_env,
-        },
-        Self::Function {
-          params: rhs_params,
-          body: rhs_body,
-          env: rhs_env,
-        },
-      ) => {
-        lhs_params == rhs_params && lhs_body == rhs_body && lhs_env == rhs_env
-      }
-
-      _ => false,
     }
   }
 }
@@ -401,6 +382,9 @@ impl PartialOrd for ExprKind {
       (Self::Integer(lhs), Self::Integer(rhs)) => lhs.partial_cmp(rhs),
 
       (Self::List(lhs), Self::List(rhs)) => {
+        lhs.eq(rhs).then_some(Ordering::Equal)
+      }
+      (Self::Form(lhs), Self::Form(rhs)) => {
         lhs.eq(rhs).then_some(Ordering::Equal)
       }
 
@@ -483,7 +467,12 @@ impl ops::Rem for ExprKind {
 }
 
 pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
-  let mut stack: Vec<Vec<Expr>> = vec![Vec::new()];
+  enum Group {
+    List,
+    Form,
+  }
+
+  let mut stack: Vec<(Vec<Expr>, Group)> = vec![(Vec::new(), Group::List)];
   let mut spans = vec![];
   let mut lazy_flag = false;
   let mut lazy_list_flags: Vec<usize> = Vec::new();
@@ -491,7 +480,7 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
   let make_lazy = |expr: Expr| {
     let span = expr.span.unwrap();
     Expr {
-      kind: ExprKind::List(Rc::new(vec![
+      kind: ExprKind::Form(Rc::new(vec![
         Expr {
           kind: ExprKind::Symbol("lazy".into()),
           span: Some(span),
@@ -512,8 +501,13 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
       TokenKind::Invalid => {}
       TokenKind::Eof => {}
 
-      TokenKind::LeftParen => {
-        stack.push(Vec::new());
+      TokenKind::LeftParen | TokenKind::LeftSquare => {
+        let group = match token.kind {
+          TokenKind::LeftParen => Group::Form,
+          TokenKind::LeftSquare => Group::List,
+          _ => unreachable!("top-level match captures others"),
+        };
+        stack.push((Vec::new(), group));
         spans.push(token.span);
 
         if lazy_flag {
@@ -521,23 +515,33 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
           lazy_list_flags.push(stack.len());
         }
       }
-      TokenKind::RightParen => {
+      TokenKind::RightParen | TokenKind::RightSquare => {
+        if let Some((_, group)) = stack.last() {
+          match (token.kind, group) {
+            (TokenKind::RightParen, Group::Form)
+            | (TokenKind::RightSquare, Group::List) => {}
+            _ => return Err("unbalanced ']' or ')'".into()),
+          }
+        }
+
         let current = stack.pop();
         let start_span = spans.pop();
 
-        if let Some(current) = current
+        if let Some((current, group)) = current
           && let Some(start_span) = start_span
-          && let Some(last) = stack.last_mut()
+          && let Some((last, _)) = stack.last_mut()
         {
-          let expr = Expr {
-            kind: ExprKind::List(Rc::new(current)),
-            span: Some(Span {
-              start: start_span.start,
-              end: token.span.end,
-              line: start_span.line,
-              column: start_span.column,
-            }),
+          let span = Some(Span {
+            start: start_span.start,
+            end: token.span.end,
+            line: start_span.line,
+            column: start_span.column,
+          });
+          let kind = match group {
+            Group::List => ExprKind::List(Rc::new(current)),
+            Group::Form => ExprKind::Form(Rc::new(current)),
           };
+          let expr = Expr { kind, span };
 
           if lazy_list_flags
             .last()
@@ -561,7 +565,7 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
         let parsed = span
           .parse::<i64>()
           .map_err(|_| "invalid integer".to_string())?;
-        if let Some(last) = stack.last_mut() {
+        if let Some((last, _)) = stack.last_mut() {
           last.push(Expr {
             kind: ExprKind::Integer(parsed),
             span: Some(token.span),
@@ -572,7 +576,7 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
         let parsed = span
           .parse::<f64>()
           .map_err(|_| "invalid float".to_string())?;
-        if let Some(last) = stack.last_mut() {
+        if let Some((last, _)) = stack.last_mut() {
           last.push(Expr {
             kind: ExprKind::Float(parsed),
             span: Some(token.span),
@@ -581,7 +585,7 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
       }
 
       TokenKind::String => {
-        if let Some(last) = stack.last_mut() {
+        if let Some((last, _)) = stack.last_mut() {
           last.push(Expr {
             kind: ExprKind::String(span.to_string()),
             span: Some(Span {
@@ -593,7 +597,7 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
         }
       }
       TokenKind::Symbol => {
-        if let Some(last) = stack.last_mut() {
+        if let Some((last, _)) = stack.last_mut() {
           if span == "nil" {
             last.push(Expr {
               kind: ExprKind::Nil,
@@ -624,7 +628,7 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
         }
       }
       TokenKind::Keyword => {
-        if let Some(last) = stack.last_mut() {
+        if let Some((last, _)) = stack.last_mut() {
           last.push(Expr {
             kind: ExprKind::Keyword(Rc::from(span)),
             span: Some(token.span),
@@ -639,7 +643,7 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
 
   if stack.len() > 1 {
     Err("unmatched ')'".to_owned())
-  } else if let Some(first) = stack.first() {
+  } else if let Some((first, _)) = stack.first() {
     Ok(first.clone())
   } else {
     Err("err, idk".to_owned())

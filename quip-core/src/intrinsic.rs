@@ -49,8 +49,6 @@ pub enum Param {
 }
 
 pub struct Intrinsic {
-  // TODO: don't think this is used, we can remove.
-  pub name: &'static str,
   pub params: &'static [Param],
   pub handler: fn(&mut Runtime, Vec<Expr>) -> Result<Expr, Error>,
 }
@@ -181,7 +179,6 @@ impl Intrinsic {
 
 pub fn arithmetic(map: &mut HashMap<&'static str, Intrinsic>) {
   const ADD: Intrinsic = Intrinsic {
-    name: "+",
     params: &[
       Param::EvalTo(ExprType::Numeric),
       Param::EvalTo(ExprType::Numeric),
@@ -202,7 +199,6 @@ pub fn arithmetic(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const SUB: Intrinsic = Intrinsic {
-    name: "-",
     params: &[
       Param::EvalTo(ExprType::Numeric),
       Param::EvalTo(ExprType::Numeric),
@@ -223,7 +219,6 @@ pub fn arithmetic(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const MUL: Intrinsic = Intrinsic {
-    name: "*",
     params: &[
       Param::EvalTo(ExprType::Numeric),
       Param::EvalTo(ExprType::Numeric),
@@ -245,7 +240,6 @@ pub fn arithmetic(map: &mut HashMap<&'static str, Intrinsic>) {
   };
   const DIV: Intrinsic =
     Intrinsic {
-      name: "/",
       params: &[
         Param::EvalTo(ExprType::Numeric),
         Param::EvalTo(ExprType::Numeric),
@@ -281,7 +275,6 @@ pub fn arithmetic(map: &mut HashMap<&'static str, Intrinsic>) {
       },
     };
   const MOD: Intrinsic = Intrinsic {
-    name: "%",
     params: &[
       Param::EvalTo(ExprType::Numeric),
       Param::EvalTo(ExprType::Numeric),
@@ -328,7 +321,6 @@ pub fn arithmetic(map: &mut HashMap<&'static str, Intrinsic>) {
 
 pub fn comparison(map: &mut HashMap<&'static str, Intrinsic>) {
   const EQ: Intrinsic = Intrinsic {
-    name: "=",
     params: &[Param::EvalTo(ExprType::Any), Param::EvalTo(ExprType::Any)],
     handler: |_, args| {
       let lhs = args[0].kind.clone();
@@ -341,7 +333,6 @@ pub fn comparison(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const NEQ: Intrinsic = Intrinsic {
-    name: "!=",
     params: &[Param::EvalTo(ExprType::Any), Param::EvalTo(ExprType::Any)],
     handler: |_, args| {
       let lhs = args[0].kind.clone();
@@ -354,7 +345,6 @@ pub fn comparison(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const LT: Intrinsic = Intrinsic {
-    name: "<",
     params: &[Param::EvalTo(ExprType::Any), Param::EvalTo(ExprType::Any)],
     handler: |runtime, args| {
       let lhs = args[0].kind.clone();
@@ -372,7 +362,6 @@ pub fn comparison(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const LTE: Intrinsic = Intrinsic {
-    name: "<=",
     params: &[Param::EvalTo(ExprType::Any), Param::EvalTo(ExprType::Any)],
     handler: |runtime, args| {
       let lhs = args[0].kind.clone();
@@ -390,7 +379,6 @@ pub fn comparison(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const GT: Intrinsic = Intrinsic {
-    name: ">",
     params: &[Param::EvalTo(ExprType::Any), Param::EvalTo(ExprType::Any)],
     handler: |runtime, args| {
       let lhs = args[0].kind.clone();
@@ -408,7 +396,6 @@ pub fn comparison(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const GTE: Intrinsic = Intrinsic {
-    name: ">=",
     params: &[Param::EvalTo(ExprType::Any), Param::EvalTo(ExprType::Any)],
     handler: |runtime, args| {
       let lhs = args[0].kind.clone();
@@ -436,7 +423,6 @@ pub fn comparison(map: &mut HashMap<&'static str, Intrinsic>) {
 
 pub fn boolean(map: &mut HashMap<&'static str, Intrinsic>) {
   const AND: Intrinsic = Intrinsic {
-    name: "and",
     params: &[Param::One(ExprType::Any), Param::One(ExprType::Any)],
     handler: |runtime, args| {
       let [lhs, rhs] = args.get(0..2).unwrap() else {
@@ -467,7 +453,6 @@ pub fn boolean(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const OR: Intrinsic = Intrinsic {
-    name: "or",
     params: &[Param::One(ExprType::Any), Param::One(ExprType::Any)],
     handler: |runtime, args| {
       let [lhs, rhs] = args.get(0..2).unwrap() else {
@@ -498,7 +483,6 @@ pub fn boolean(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const NOT: Intrinsic = Intrinsic {
-    name: "not",
     params: &[Param::EvalTo(ExprType::Boolean)],
     handler: |runtime, args| {
       let val = args[0].kind.clone();
@@ -521,7 +505,6 @@ pub fn boolean(map: &mut HashMap<&'static str, Intrinsic>) {
 
 pub fn list_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   const LIST: Intrinsic = Intrinsic {
-    name: "list",
     params: &[Param::Many(ExprType::Any)],
     handler: |runtime, args| {
       let evaluated = args
@@ -535,7 +518,6 @@ pub fn list_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const NTH: Intrinsic = Intrinsic {
-    name: "nth",
     params: &[
       Param::EvalTo(ExprType::Integer),
       Param::EvalTo(ExprType::Any),
@@ -591,7 +573,6 @@ pub fn list_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const SET_NTH: Intrinsic = Intrinsic {
-    name: "set-nth",
     params: &[
       Param::EvalTo(ExprType::Integer),
       Param::EvalTo(ExprType::List),
@@ -645,7 +626,6 @@ pub fn list_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const PUSH: Intrinsic = Intrinsic {
-    name: "push",
     params: &[Param::EvalTo(ExprType::List), Param::EvalTo(ExprType::Any)],
     handler: |runtime, args| {
       let list_val = args[0].clone();
@@ -671,7 +651,6 @@ pub fn list_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const POP: Intrinsic = Intrinsic {
-    name: "pop",
     params: &[Param::EvalTo(ExprType::List)],
     handler: |runtime, args| {
       let list_val = args[0].clone();
@@ -710,7 +689,6 @@ pub fn list_ops(map: &mut HashMap<&'static str, Intrinsic>) {
 
 pub fn type_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   const LEN: Intrinsic = Intrinsic {
-    name: "len",
     params: &[Param::EvalTo(ExprType::Any)],
     handler: |runtime, args| {
       let val = args[0].kind.clone();
@@ -730,7 +708,6 @@ pub fn type_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const TYPEOF: Intrinsic = Intrinsic {
-    name: "typeof",
     params: &[Param::EvalTo(ExprType::Any)],
     handler: |_, args| {
       let val = args[0].kind.clone();
@@ -747,7 +724,6 @@ pub fn type_ops(map: &mut HashMap<&'static str, Intrinsic>) {
 
 pub fn io_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   const PRINT: Intrinsic = Intrinsic {
-    name: "print",
     params: &[Param::Many(ExprType::Any)],
     handler: |runtime, args| {
       let parts = args
@@ -762,7 +738,6 @@ pub fn io_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const DBG: Intrinsic = Intrinsic {
-    name: "dbg",
     params: &[Param::EvalTo(ExprType::Any)],
     handler: |_, args| {
       let val = args[0].clone();
@@ -771,7 +746,6 @@ pub fn io_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const TO_STRING: Intrinsic = Intrinsic {
-    name: "to-string",
     params: &[Param::EvalTo(ExprType::Any)],
     handler: |_, args| {
       Ok(Expr {
@@ -788,7 +762,6 @@ pub fn io_ops(map: &mut HashMap<&'static str, Intrinsic>) {
 
 pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   const FN: Intrinsic = Intrinsic {
-    name: "fn",
     params: &[Param::One(ExprType::List), Param::Many(ExprType::Any)],
     handler: |runtime, args| {
       let Some(params_expr) = args.first() else {
@@ -813,7 +786,6 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const DEFN: Intrinsic = Intrinsic {
-    name: "defn",
     params: &[
       Param::One(ExprType::Symbol),
       Param::One(ExprType::List),
@@ -856,7 +828,6 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const DEF: Intrinsic = Intrinsic {
-    name: "def",
     params: &[Param::One(ExprType::Symbol), Param::EvalTo(ExprType::Any)],
     handler: |runtime, args| {
       if let Some([name, val]) = args.get(0..2) {
@@ -880,7 +851,6 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const SET: Intrinsic = Intrinsic {
-    name: "set",
     params: &[Param::One(ExprType::Symbol), Param::EvalTo(ExprType::Any)],
     handler: |runtime, args| {
       let [
@@ -902,12 +872,10 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const LAZY: Intrinsic = Intrinsic {
-    name: "lazy",
     params: &[Param::One(ExprType::Any)],
     handler: |_, args| Ok(args[0].clone()),
   };
   const EVAL: Intrinsic = Intrinsic {
-    name: "eval",
     params: &[Param::One(ExprType::Any)],
     handler: |runtime, args| {
       let result = args[0].clone();
@@ -915,7 +883,6 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const CALL: Intrinsic = Intrinsic {
-    name: "call",
     params: &[Param::One(ExprType::Any), Param::Many(ExprType::Any)],
     handler: |runtime, args| {
       let expr = runtime.eval_expr(&args[0])?;
@@ -932,7 +899,6 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const DO: Intrinsic = Intrinsic {
-    name: "do",
     params: &[Param::Many(ExprType::Any)],
     handler: |runtime, args| {
       let result = args.iter().try_fold(
@@ -946,7 +912,6 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const PARSE: Intrinsic = Intrinsic {
-    name: "parse",
     params: &[Param::EvalTo(ExprType::String)],
     handler: |runtime, args| {
       let ExprKind::String(ref str) = args.first().unwrap().kind else {
@@ -963,7 +928,6 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const RECUR: Intrinsic = Intrinsic {
-    name: "recur",
     params: &[Param::Many(ExprType::Any)],
     handler: |runtime, args| {
       runtime.recur = Some(args.to_vec());
@@ -974,7 +938,6 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const IF: Intrinsic = Intrinsic {
-    name: "if",
     params: &[Param::EvalTo(ExprType::Boolean), Param::One(ExprType::Any)],
     handler: |runtime, args| {
       let [cond, body_expr] = args.get(0..2).unwrap() else {
@@ -1015,7 +978,6 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
 
 pub fn error_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   const TRY: Intrinsic = Intrinsic {
-    name: "try",
     params: &[Param::One(ExprType::Any)],
     handler: |runtime, args| match runtime.eval_expr(&args[0]) {
       Ok(result) => Ok(result),
@@ -1026,7 +988,6 @@ pub fn error_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const ERROR: Intrinsic = Intrinsic {
-    name: "error",
     params: &[Param::EvalTo(ExprType::Any)],
     handler: |_, args| {
       let inner = args[0].clone();
@@ -1037,7 +998,6 @@ pub fn error_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
   const THROW: Intrinsic = Intrinsic {
-    name: "throw",
     params: &[Param::EvalTo(ExprType::Any)],
     handler: |runtime, args| {
       let inner = args[0].clone();

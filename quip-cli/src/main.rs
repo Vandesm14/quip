@@ -1,7 +1,7 @@
 use std::{io::Read, path::PathBuf};
 
 use clap::Parser;
-use quip::{
+use quip_core::{
   ast::{lex, parse},
   run::Runtime,
 };

@@ -1,11 +1,8 @@
-[package]
-name = "quip"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "2"
+members = ["quip-cli", "quip-core"]
 
-[dependencies]
+[workspace.dependencies]
 itertools = "0.14.0"
 slotmap = "1.1.1"
-clap = { version = "4", features = ["derive"] }
-reedline = "0.47"
 thiserror = "2.0.18"

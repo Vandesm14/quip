@@ -1,0 +1,9 @@
+[package]
+name = "quip-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+itertools.workspace = true
+slotmap.workspace = true
+thiserror.workspace = true

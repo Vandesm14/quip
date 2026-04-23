@@ -349,7 +349,7 @@ impl core::fmt::Display for ExprKind {
       ExprKind::Function { params, body, .. } => {
         write!(
           f,
-          "(fn [{}] {})",
+          "Fn([{}] {})",
           params.iter().join(" "),
           body.iter().join(" ")
         )

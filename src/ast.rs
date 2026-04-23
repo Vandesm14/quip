@@ -479,24 +479,28 @@ impl ops::Rem for ExprKind {
 pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
   let mut stack: Vec<Vec<Expr>> = vec![Vec::new()];
   let mut spans = vec![];
-  // Whether the next expr should be lazy. (<span of the lazy `'`> <applies to list>).
-  let mut lazy_span: Option<(Span, bool)> = None;
+  let mut lazy_flag = false;
+  let mut lazy_list_flags: Vec<usize> = Vec::new();
 
-  let make_lazy = |expr: Expr, span: Span| Expr {
-    kind: ExprKind::List(Rc::new(vec![
-      Expr {
-        kind: ExprKind::Symbol("lazy".into()),
-        span: Some(span),
-      },
-      expr,
-    ])),
-    span: Some(span),
+  let make_lazy = |expr: Expr| {
+    let span = expr.span.unwrap();
+    Expr {
+      kind: ExprKind::List(Rc::new(vec![
+        Expr {
+          kind: ExprKind::Symbol("lazy".into()),
+          span: Some(span),
+        },
+        expr,
+      ])),
+      span: Some(span),
+    }
   };
 
   for token in tokens.into_iter() {
     let span = source
       .get(token.span.to_range())
       .ok_or_else(|| "bad span".to_string())?;
+    let stack_len = stack.len();
 
     match token.kind {
       TokenKind::Invalid => {}
@@ -506,8 +510,9 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
         stack.push(Vec::new());
         spans.push(token.span);
 
-        if let Some((_, ref mut is_list)) = lazy_span {
-          *is_list = true;
+        if lazy_flag {
+          lazy_flag = false;
+          lazy_list_flags.push(stack.len());
         }
       }
       TokenKind::RightParen => {
@@ -527,19 +532,23 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
               column: start_span.column,
             }),
           };
-          last.push(
-            lazy_span
-              .take()
-              .map(|(span, _)| make_lazy(expr.clone(), span))
-              .unwrap_or(expr),
-          );
+
+          if lazy_list_flags
+            .last()
+            .is_some_and(|level| *level == stack_len)
+          {
+            lazy_list_flags.pop();
+            last.push(make_lazy(expr));
+          } else {
+            last.push(expr);
+          }
         } else {
           return Err("unmatched '('".to_string());
         }
       }
 
       TokenKind::Lazy => {
-        lazy_span = Some((token.span, false));
+        lazy_flag = true;
       }
 
       TokenKind::Integer => {
@@ -599,16 +608,12 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
               kind: ExprKind::Symbol(Rc::from(span)),
               span: Some(token.span),
             };
-            last.push(
-              if let Some((span, is_list)) = lazy_span
-                && !is_list
-              {
-                lazy_span = None;
-                make_lazy(expr, span)
-              } else {
-                expr
-              },
-            );
+            if lazy_flag {
+              lazy_flag = false;
+              last.push(make_lazy(expr));
+            } else {
+              last.push(expr);
+            }
           }
         }
       }

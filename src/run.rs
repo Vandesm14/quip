@@ -1811,6 +1811,25 @@ mod tests {
     }
 
     #[test]
+    fn test_lazy_nested_lists() {
+      let result = run("'(+ (1 2))").unwrap();
+      if let ExprKind::List(items) = result.kind {
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].kind, ExprKind::Symbol("+".into()));
+        if let ExprKind::List(ref items) =
+          items.get(1).expect("Expected second item in list").kind
+        {
+          assert_eq!(items[0].kind, ExprKind::Integer(1));
+          assert_eq!(items[1].kind, ExprKind::Integer(2));
+        } else {
+          panic!("Expected second list");
+        }
+      } else {
+        panic!("Expected list");
+      };
+    }
+
+    #[test]
     fn test_lazy_list_itemss() {
       let result = run("(list '+ 1 2)").unwrap();
       if let ExprKind::List(items) = result.kind {

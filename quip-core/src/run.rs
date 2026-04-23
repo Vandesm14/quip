@@ -231,40 +231,6 @@ impl Runtime {
             }
 
             match symbol.as_str() {
-              "defn" => {
-                // (defn name [params...] body...)  →  (def name (fn [params...] body...))
-                let Some([name, params_expr]) = list.get(1..3) else {
-                  return Err(self.error(ErrorReason::Message(
-                    "defn: expected name and params".to_string(),
-                  )));
-                };
-                let ExprKind::Symbol(sym) = &name.kind else {
-                  return Err(self.error(ErrorReason::Message(
-                    "defn: invalid name".to_string(),
-                  )));
-                };
-                if intrinsics.contains_key(sym.as_ref()) {
-                  return Err(self.error(ErrorReason::Message(format!(
-                    "'{sym}' is an intrinsic and cannot be redefined"
-                  ))));
-                }
-                let ExprKind::List(param_list) = &params_expr.kind else {
-                  return Err(self.error(ErrorReason::Message(
-                    "defn: expected params list".to_string(),
-                  )));
-                };
-                let params = Self::parse_params(param_list, "defn")
-                  .map_err(|e| self.error(e.into()))?;
-                let body = list.get(3..).unwrap_or(&[]).to_vec();
-                let env = self.context.current();
-                let func = Expr {
-                  kind: ExprKind::Function { params, body, env },
-                  span: expr.span,
-                };
-                self.context.define(sym.clone(), func);
-                Ok(name.clone())
-              }
-
               "def" => {
                 if let Some([name, val]) = list.get(1..3) {
                   let ExprKind::Symbol(sym) = &name.kind else {

@@ -17,6 +17,8 @@ pub enum ExprType {
   Numeric,
   /// string
   String,
+  /// symbol
+  Symbol,
   /// (...)
   List,
   /// any
@@ -31,6 +33,7 @@ impl std::fmt::Display for ExprType {
       ExprType::Float => write!(f, "float"),
       ExprType::Numeric => write!(f, "numeric"),
       ExprType::String => write!(f, "string"),
+      ExprType::Symbol => write!(f, "symbol"),
       ExprType::List => write!(f, "list"),
       ExprType::Any => write!(f, "any"),
     }
@@ -46,6 +49,7 @@ pub enum Param {
 }
 
 pub struct Intrinsic {
+  // TODO: don't think this is used, we can remove.
   pub name: &'static str,
   pub params: &'static [Param],
   pub handler: fn(&mut Runtime, Vec<Expr>) -> Result<Expr, Error>,
@@ -156,6 +160,7 @@ impl Intrinsic {
         matches!(expr.kind, ExprKind::Integer(_) | ExprKind::Float(_))
       }
       ExprType::String => matches!(expr.kind, ExprKind::String(_)),
+      ExprType::Symbol => matches!(expr.kind, ExprKind::Symbol(_)),
       ExprType::List => matches!(expr.kind, ExprKind::List(_)),
       ExprType::Any => true,
     };
@@ -738,9 +743,52 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
       let env = runtime.context.current();
       Ok(Expr {
         kind: ExprKind::Function { params, body, env },
-        // TODO: should there be a span?
+        // TODO: give it the span of the expr. handlers need access to the expr.
         span: None,
       })
+    },
+  };
+  const DEFN: Intrinsic = Intrinsic {
+    name: "defn",
+    params: &[
+      Param::One(ExprType::Symbol),
+      Param::One(ExprType::List),
+      Param::Many(ExprType::Any),
+    ],
+    handler: |runtime, args| {
+      // (defn name [params...] body...)  →  (def name (fn [params...] body...))
+      let Some([name, params_expr]) = args.get(0..2) else {
+        return Err(runtime.error(ErrorReason::Message(
+          "defn: expected name and params".to_string(),
+        )));
+      };
+      let ExprKind::Symbol(sym) = &name.kind else {
+        return Err(
+          runtime.error(ErrorReason::Message("defn: invalid name".to_string())),
+        );
+      };
+      // TODO: reimplement by passing intrinsics key into the handler.
+      // if intrinsics.contains_key(sym.as_ref()) {
+      //   return Err(runtime.error(ErrorReason::Message(format!(
+      //     "'{sym}' is an intrinsic and cannot be redefined"
+      //   ))));
+      // }
+      let ExprKind::List(param_list) = &params_expr.kind else {
+        return Err(runtime.error(ErrorReason::Message(
+          "defn: expected params list".to_string(),
+        )));
+      };
+      let params = Runtime::parse_params(param_list, "defn")
+        .map_err(|e| runtime.error(e.into()))?;
+      let body = args.get(2..).unwrap_or(&[]).to_vec();
+      let env = runtime.context.current();
+      let func = Expr {
+        kind: ExprKind::Function { params, body, env },
+        // TODO: give it the span of the expr. handlers need access to the expr.
+        span: None,
+      };
+      runtime.context.define(sym.clone(), func);
+      Ok(name.clone())
     },
   };
   const LAZY: Intrinsic = Intrinsic {
@@ -806,6 +854,7 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   };
 
   map.insert("fn", FN);
+  map.insert("defn", DEFN);
   map.insert("lazy", LAZY);
   map.insert("eval", EVAL);
   map.insert("call", CALL);

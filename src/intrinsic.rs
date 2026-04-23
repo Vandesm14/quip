@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::{Expr, ExprKind};
+use crate::ast::{Expr, ExprKind, lex, parse};
 use crate::run::{CallError, CallErrorKind, Error, ErrorReason, Runtime};
 
 /// Type variant for parameter validation.
@@ -776,11 +776,29 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
       Ok(result)
     },
   };
+  const PARSE: Intrinsic = Intrinsic {
+    name: "parse",
+    params: &[Param::EvalTo(ExprType::String)],
+    handler: |runtime, args| {
+      let ExprKind::String(ref str) = args.first().unwrap().kind else {
+        unreachable!("type-checker validates types");
+      };
+      let tokens = lex(str);
+      let exprs = parse(str, tokens).map_err(|err| {
+        runtime.error(ErrorReason::Message(format!("parse error: {err}")))
+      })?;
+      Ok(Expr {
+        kind: ExprKind::List(Rc::new(exprs)),
+        span: None,
+      })
+    },
+  };
 
   map.insert("lazy", LAZY);
   map.insert("eval", EVAL);
   map.insert("call", CALL);
   map.insert("do", DO);
+  map.insert("parse", PARSE);
 }
 
 pub fn error_ops(map: &mut HashMap<&'static str, Intrinsic>) {

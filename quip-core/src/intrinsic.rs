@@ -816,6 +816,29 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
       }
     },
   };
+  const SET: Intrinsic = Intrinsic {
+    name: "set",
+    params: &[Param::One(ExprType::Symbol), Param::One(ExprType::Any)],
+    handler: |runtime, args| {
+      if let Some([name, val]) = args.get(0..2) {
+        let ExprKind::Symbol(name) = &name.kind else {
+          return Err(
+            runtime
+              .error(ErrorReason::Message("set: invalid name".to_string())),
+          );
+        };
+        let val = runtime.eval_expr(val)?;
+        runtime
+          .context
+          .set(name.clone(), val.clone())
+          .map_err(ErrorReason::Message)
+          .map_err(|e| runtime.error(e))?;
+        Ok(val)
+      } else {
+        Err(runtime.error(ErrorReason::Message("invalid set".to_string())))
+      }
+    },
+  };
   const LAZY: Intrinsic = Intrinsic {
     name: "lazy",
     params: &[Param::One(ExprType::Any)],
@@ -881,6 +904,7 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   map.insert("fn", FN);
   map.insert("defn", DEFN);
   map.insert("def", DEF);
+  map.insert("set", SET);
   map.insert("lazy", LAZY);
   map.insert("eval", EVAL);
   map.insert("call", CALL);

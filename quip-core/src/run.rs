@@ -231,27 +231,6 @@ impl Runtime {
             }
 
             match symbol.as_str() {
-              "set" => {
-                if let Some([name, val]) = list.get(1..3) {
-                  let ExprKind::Symbol(name) = &name.kind else {
-                    return Err(self.error(ErrorReason::Message(
-                      "set: invalid name".to_string(),
-                    )));
-                  };
-                  let val = self.eval_expr(val)?;
-                  self
-                    .context
-                    .set(name.clone(), val.clone())
-                    .map_err(ErrorReason::Message)
-                    .map_err(|e| self.error(e))?;
-                  Ok(val)
-                } else {
-                  Err(
-                    self.error(ErrorReason::Message("invalid set".to_string())),
-                  )
-                }
-              }
-
               "and" => {
                 if let Some([lhs, rhs]) = list.get(1..3) {
                   let lhs = self.eval_expr(lhs)?.kind;

@@ -333,7 +333,7 @@ impl core::fmt::Display for ExprKind {
     match self {
       ExprKind::Nil => write!(f, "nil"),
       ExprKind::Boolean(b) => write!(f, "{}", b),
-      ExprKind::String(string) => write!(f, "{}", string),
+      ExprKind::String(string) => write!(f, "\"{}\"", string),
       ExprKind::Keyword(keyword) => write!(f, ":{}", keyword),
       ExprKind::Symbol(symbol) => write!(f, "{}", symbol),
       ExprKind::Error(error) => write!(f, "Error({})", error),
@@ -349,7 +349,7 @@ impl core::fmt::Display for ExprKind {
       ExprKind::Function { params, body, .. } => {
         write!(
           f,
-          "(fn ({}) {})",
+          "(fn [{}] {})",
           params.iter().join(" "),
           body.iter().join(" ")
         )

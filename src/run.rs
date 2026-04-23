@@ -101,6 +101,8 @@ pub enum CallErrorKind {
     expected: Vec<String>,
     received: Vec<String>,
   },
+  #[error("uncallable form")]
+  UncallableForm,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -208,249 +210,282 @@ impl Runtime {
   }
 
   pub fn eval_expr(&mut self, expr: &Expr) -> Result<Expr, Error> {
-    if let ExprKind::Form(list) = &expr.kind
-      && let Some(ExprKind::Symbol(sym)) = list.first().map(|e| &e.kind)
-    {
-      let symbol = sym.to_string();
+    if let ExprKind::Form(list) = &expr.kind {
+      if let Some(first) = list.first() {
+        match &first.kind {
+          ExprKind::Symbol(symbol) => {
+            let symbol = symbol.to_string();
 
-      // Check for intrinsics first.
-      let intrinsics = crate::intrinsic::all();
-      if let Some(intrinsic) = intrinsics.get(symbol.as_str()) {
-        let args = intrinsic.check_params(self, list, &symbol)?;
-        self.call_stack.push(CallFrame {
-          expr: expr.clone(),
-          call_site: expr.span,
-          recurs: 0,
-        });
-        let result = (intrinsic.handler)(self, args);
-        assert!(self.call_stack.pop().is_some());
-        return result;
-      }
-
-      match symbol.as_str() {
-        "fn" => {
-          // (fn [params...] body...) -> function
-          let Some(params_expr) = list.get(1) else {
-            return Err(self.error(ErrorReason::Message(
-              "fn: expected params list".to_string(),
-            )));
-          };
-          let ExprKind::List(param_list) = &params_expr.kind else {
-            return Err(self.error(ErrorReason::Message(
-              "fn: expected params list".to_string(),
-            )));
-          };
-          let params = Self::parse_params(param_list, "fn")
-            .map_err(|e| self.error(e.into()))?;
-          let body = list.get(2..).unwrap_or(&[]).to_vec();
-          let env = self.context.current();
-          Ok(Expr {
-            kind: ExprKind::Function { params, body, env },
-            span: expr.span,
-          })
-        }
-
-        "defn" => {
-          // (defn name [params...] body...)  →  (def name (fn [params...] body...))
-          let Some([name, params_expr]) = list.get(1..3) else {
-            return Err(self.error(ErrorReason::Message(
-              "defn: expected name and params".to_string(),
-            )));
-          };
-          let ExprKind::Symbol(sym) = &name.kind else {
-            return Err(
-              self
-                .error(ErrorReason::Message("defn: invalid name".to_string())),
-            );
-          };
-          if intrinsics.contains_key(sym.as_ref()) {
-            return Err(self.error(ErrorReason::Message(format!(
-              "'{sym}' is an intrinsic and cannot be redefined"
-            ))));
-          }
-          let ExprKind::List(param_list) = &params_expr.kind else {
-            return Err(self.error(ErrorReason::Message(
-              "defn: expected params list".to_string(),
-            )));
-          };
-          let params = Self::parse_params(param_list, "defn")
-            .map_err(|e| self.error(e.into()))?;
-          let body = list.get(3..).unwrap_or(&[]).to_vec();
-          let env = self.context.current();
-          let func = Expr {
-            kind: ExprKind::Function { params, body, env },
-            span: expr.span,
-          };
-          self.context.define(sym.clone(), func);
-          Ok(name.clone())
-        }
-
-        "def" => {
-          if let Some([name, val]) = list.get(1..3) {
-            let ExprKind::Symbol(sym) = &name.kind else {
-              return Err(
-                self
-                  .error(ErrorReason::Message("def: invalid name".to_string())),
-              );
-            };
-            if intrinsics.contains_key(sym.as_ref()) {
-              return Err(self.error(ErrorReason::Message(format!(
-                "'{sym}' is an intrinsic and cannot be redefined"
-              ))));
-            }
-            let val = self.eval_expr(val)?;
-            self.context.define(sym.clone(), val.clone());
-            Ok(name.clone())
-          } else {
-            Err(self.error(ErrorReason::Message("invalid def".to_string())))
-          }
-        }
-
-        "set" => {
-          if let Some([name, val]) = list.get(1..3) {
-            let ExprKind::Symbol(name) = &name.kind else {
-              return Err(
-                self
-                  .error(ErrorReason::Message("set: invalid name".to_string())),
-              );
-            };
-            let val = self.eval_expr(val)?;
-            self
-              .context
-              .set(name.clone(), val.clone())
-              .map_err(ErrorReason::Message)
-              .map_err(|e| self.error(e))?;
-            Ok(val)
-          } else {
-            Err(self.error(ErrorReason::Message("invalid set".to_string())))
-          }
-        }
-
-        "and" => {
-          if let Some([lhs, rhs]) = list.get(1..3) {
-            let lhs = self.eval_expr(lhs)?.kind;
-            let ExprKind::Boolean(lhs) = lhs else {
-              return Err(self.error(ErrorReason::Message(
-                "'and' requires boolean arguments".to_string(),
-              )));
-            };
-            if !lhs {
-              return Ok(Expr {
-                kind: ExprKind::Boolean(false),
-                span: None,
+            // Check for intrinsics first.
+            let intrinsics = crate::intrinsic::all();
+            if let Some(intrinsic) = intrinsics.get(symbol.as_str()) {
+              let args = intrinsic.check_params(self, list, &symbol)?;
+              self.call_stack.push(CallFrame {
+                expr: expr.clone(),
+                call_site: expr.span,
+                recurs: 0,
               });
+              let result = (intrinsic.handler)(self, args);
+              assert!(self.call_stack.pop().is_some());
+              return result;
             }
-            let rhs = self.eval_expr(rhs)?.kind;
-            let ExprKind::Boolean(rhs) = rhs else {
-              return Err(self.error(ErrorReason::Message(
-                "'and' requires boolean arguments".to_string(),
-              )));
-            };
-            Ok(Expr {
-              kind: ExprKind::Boolean(rhs),
+
+            match symbol.as_str() {
+              "fn" => {
+                // (fn [params...] body...) -> function
+                let Some(params_expr) = list.get(1) else {
+                  return Err(self.error(ErrorReason::Message(
+                    "fn: expected params list".to_string(),
+                  )));
+                };
+                let ExprKind::List(param_list) = &params_expr.kind else {
+                  return Err(self.error(ErrorReason::Message(
+                    "fn: expected params list".to_string(),
+                  )));
+                };
+                let params = Self::parse_params(param_list, "fn")
+                  .map_err(|e| self.error(e.into()))?;
+                let body = list.get(2..).unwrap_or(&[]).to_vec();
+                let env = self.context.current();
+                Ok(Expr {
+                  kind: ExprKind::Function { params, body, env },
+                  span: expr.span,
+                })
+              }
+
+              "defn" => {
+                // (defn name [params...] body...)  →  (def name (fn [params...] body...))
+                let Some([name, params_expr]) = list.get(1..3) else {
+                  return Err(self.error(ErrorReason::Message(
+                    "defn: expected name and params".to_string(),
+                  )));
+                };
+                let ExprKind::Symbol(sym) = &name.kind else {
+                  return Err(self.error(ErrorReason::Message(
+                    "defn: invalid name".to_string(),
+                  )));
+                };
+                if intrinsics.contains_key(sym.as_ref()) {
+                  return Err(self.error(ErrorReason::Message(format!(
+                    "'{sym}' is an intrinsic and cannot be redefined"
+                  ))));
+                }
+                let ExprKind::List(param_list) = &params_expr.kind else {
+                  return Err(self.error(ErrorReason::Message(
+                    "defn: expected params list".to_string(),
+                  )));
+                };
+                let params = Self::parse_params(param_list, "defn")
+                  .map_err(|e| self.error(e.into()))?;
+                let body = list.get(3..).unwrap_or(&[]).to_vec();
+                let env = self.context.current();
+                let func = Expr {
+                  kind: ExprKind::Function { params, body, env },
+                  span: expr.span,
+                };
+                self.context.define(sym.clone(), func);
+                Ok(name.clone())
+              }
+
+              "def" => {
+                if let Some([name, val]) = list.get(1..3) {
+                  let ExprKind::Symbol(sym) = &name.kind else {
+                    return Err(self.error(ErrorReason::Message(
+                      "def: invalid name".to_string(),
+                    )));
+                  };
+                  if intrinsics.contains_key(sym.as_ref()) {
+                    return Err(self.error(ErrorReason::Message(format!(
+                      "'{sym}' is an intrinsic and cannot be redefined"
+                    ))));
+                  }
+                  let val = self.eval_expr(val)?;
+                  self.context.define(sym.clone(), val.clone());
+                  Ok(name.clone())
+                } else {
+                  Err(
+                    self.error(ErrorReason::Message("invalid def".to_string())),
+                  )
+                }
+              }
+
+              "set" => {
+                if let Some([name, val]) = list.get(1..3) {
+                  let ExprKind::Symbol(name) = &name.kind else {
+                    return Err(self.error(ErrorReason::Message(
+                      "set: invalid name".to_string(),
+                    )));
+                  };
+                  let val = self.eval_expr(val)?;
+                  self
+                    .context
+                    .set(name.clone(), val.clone())
+                    .map_err(ErrorReason::Message)
+                    .map_err(|e| self.error(e))?;
+                  Ok(val)
+                } else {
+                  Err(
+                    self.error(ErrorReason::Message("invalid set".to_string())),
+                  )
+                }
+              }
+
+              "and" => {
+                if let Some([lhs, rhs]) = list.get(1..3) {
+                  let lhs = self.eval_expr(lhs)?.kind;
+                  let ExprKind::Boolean(lhs) = lhs else {
+                    return Err(self.error(ErrorReason::Message(
+                      "'and' requires boolean arguments".to_string(),
+                    )));
+                  };
+                  if !lhs {
+                    return Ok(Expr {
+                      kind: ExprKind::Boolean(false),
+                      span: None,
+                    });
+                  }
+                  let rhs = self.eval_expr(rhs)?.kind;
+                  let ExprKind::Boolean(rhs) = rhs else {
+                    return Err(self.error(ErrorReason::Message(
+                      "'and' requires boolean arguments".to_string(),
+                    )));
+                  };
+                  Ok(Expr {
+                    kind: ExprKind::Boolean(rhs),
+                    span: None,
+                  })
+                } else {
+                  Err(self.error(ErrorReason::CallError(CallError {
+                    symbol,
+                    kind: CallErrorKind::IncorrectArity {
+                      expected: 2,
+                      received: list.len().saturating_sub(1),
+                    },
+                  })))
+                }
+              }
+
+              "or" => {
+                if let Some([lhs, rhs]) = list.get(1..3) {
+                  let lhs = self.eval_expr(lhs)?.kind;
+                  let ExprKind::Boolean(lhs) = lhs else {
+                    return Err(self.error(ErrorReason::Message(
+                      "'or' requires boolean arguments".to_string(),
+                    )));
+                  };
+                  if lhs {
+                    return Ok(Expr {
+                      kind: ExprKind::Boolean(true),
+                      span: None,
+                    });
+                  }
+                  let rhs = self.eval_expr(rhs)?.kind;
+                  let ExprKind::Boolean(rhs) = rhs else {
+                    return Err(self.error(ErrorReason::Message(
+                      "'or' requires boolean arguments".to_string(),
+                    )));
+                  };
+                  Ok(Expr {
+                    kind: ExprKind::Boolean(rhs),
+                    span: None,
+                  })
+                } else {
+                  Err(self.error(ErrorReason::CallError(CallError {
+                    symbol,
+                    kind: CallErrorKind::IncorrectArity {
+                      expected: 2,
+                      received: list.len().saturating_sub(1),
+                    },
+                  })))
+                }
+              }
+
+              "recur" => {
+                self.recur = Some(list.get(1..).unwrap_or_default().to_vec());
+                Ok(Expr {
+                  kind: ExprKind::Nil,
+                  span: None,
+                })
+              }
+
+              "if" => {
+                let Some([cond_expr, body_expr]) = list.get(1..3) else {
+                  return Err(self.error(ErrorReason::CallError(CallError {
+                    symbol,
+                    kind: CallErrorKind::IncorrectArity {
+                      expected: 2,
+                      received: list.len() - 1,
+                    },
+                  })));
+                };
+                let cond = self.eval_expr(cond_expr)?;
+                if let ExprKind::Boolean(true) = cond.kind {
+                  let body = self.eval_expr(body_expr)?;
+                  if let ExprKind::Function { .. } = body.kind {
+                    self.call(
+                      &body,
+                      Vec::new(),
+                      &format!("(if {} {})", cond_expr, body_expr),
+                    )
+                  } else {
+                    Ok(body)
+                  }
+                } else {
+                  Ok(Expr {
+                    kind: ExprKind::Nil,
+                    span: None,
+                  })
+                }
+              }
+
+              _ => {
+                // Symbol look-up.
+                let val =
+                  self.context.get(symbol.as_str()).cloned().ok_or_else(
+                    || {
+                      self.error(ErrorReason::Message(format!(
+                        "undefined '{}'",
+                        symbol
+                      )))
+                    },
+                  )?;
+                if let ExprKind::Function { .. } = val.kind {
+                  let call_args = list.get(1..).unwrap_or(&[]);
+                  self.call(&val, call_args.to_vec(), symbol.as_ref())
+                } else {
+                  Err(self.error(ErrorReason::Message(format!(
+                    "'{}' is not a function",
+                    symbol
+                  ))))
+                }
+              }
+            }
+          }
+          ExprKind::Error(_) => todo!("call errors = throw them?"),
+          // ExprKind::List(exprs) => todo!(),
+          ExprKind::Form(exprs) => {
+            let mut exprs = exprs.to_vec();
+            for arg in list.get(1..).unwrap_or_default() {
+              exprs.push(arg.clone());
+            }
+            self.eval_expr(&Expr {
+              kind: ExprKind::Form(Rc::new(exprs)),
               span: None,
             })
-          } else {
-            Err(self.error(ErrorReason::CallError(CallError {
-              symbol,
-              kind: CallErrorKind::IncorrectArity {
-                expected: 2,
-                received: list.len().saturating_sub(1),
-              },
-            })))
           }
+          ExprKind::Function { .. } => self.call(
+            first,
+            list.get(1..).unwrap_or_default().to_vec(),
+            &format!("{expr}"),
+          ),
+          _ => Err(self.error(ErrorReason::CallError(CallError {
+            symbol: format!("{expr}"),
+            kind: CallErrorKind::UncallableForm,
+          }))),
         }
-
-        "or" => {
-          if let Some([lhs, rhs]) = list.get(1..3) {
-            let lhs = self.eval_expr(lhs)?.kind;
-            let ExprKind::Boolean(lhs) = lhs else {
-              return Err(self.error(ErrorReason::Message(
-                "'or' requires boolean arguments".to_string(),
-              )));
-            };
-            if lhs {
-              return Ok(Expr {
-                kind: ExprKind::Boolean(true),
-                span: None,
-              });
-            }
-            let rhs = self.eval_expr(rhs)?.kind;
-            let ExprKind::Boolean(rhs) = rhs else {
-              return Err(self.error(ErrorReason::Message(
-                "'or' requires boolean arguments".to_string(),
-              )));
-            };
-            Ok(Expr {
-              kind: ExprKind::Boolean(rhs),
-              span: None,
-            })
-          } else {
-            Err(self.error(ErrorReason::CallError(CallError {
-              symbol,
-              kind: CallErrorKind::IncorrectArity {
-                expected: 2,
-                received: list.len().saturating_sub(1),
-              },
-            })))
-          }
-        }
-
-        "recur" => {
-          self.recur = Some(list.get(1..).unwrap_or_default().to_vec());
-          Ok(Expr {
-            kind: ExprKind::Nil,
-            span: None,
-          })
-        }
-
-        "if" => {
-          let Some([cond_expr, body_expr]) = list.get(1..3) else {
-            return Err(self.error(ErrorReason::CallError(CallError {
-              symbol,
-              kind: CallErrorKind::IncorrectArity {
-                expected: 2,
-                received: list.len() - 1,
-              },
-            })));
-          };
-          let cond = self.eval_expr(cond_expr)?;
-          if let ExprKind::Boolean(true) = cond.kind {
-            let body = self.eval_expr(body_expr)?;
-            if let ExprKind::Function { .. } = body.kind {
-              self.call(
-                &body,
-                Vec::new(),
-                &format!("(if {} {})", cond_expr, body_expr),
-              )
-            } else {
-              Ok(body)
-            }
-          } else {
-            Ok(Expr {
-              kind: ExprKind::Nil,
-              span: None,
-            })
-          }
-        }
-
-        _ => {
-          // Symbol look-up.
-          let val =
-            self.context.get(symbol.as_str()).cloned().ok_or_else(|| {
-              self
-                .error(ErrorReason::Message(format!("undefined '{}'", symbol)))
-            })?;
-          if let ExprKind::Function { .. } = val.kind {
-            let call_args = list.get(1..).unwrap_or(&[]);
-            self.call(&val, call_args.to_vec(), symbol.as_ref())
-          } else {
-            Err(self.error(ErrorReason::Message(format!(
-              "'{}' is not a function",
-              symbol
-            ))))
-          }
-        }
+      } else {
+        // TODO: decide whether to error if there's an empty form.
+        Ok(expr.clone())
       }
     } else if let ExprKind::Symbol(sym) = &expr.kind {
       // Get vars.

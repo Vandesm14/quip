@@ -279,7 +279,7 @@ impl Runtime {
     } else if let ExprKind::Symbol(sym) = &expr.kind {
       // Get vars.
       self.context.get(sym).cloned().ok_or_else(|| {
-        self.error(ErrorReason::Message(format!("undefined fn '{}'", sym)))
+        self.error(ErrorReason::Message(format!("undefined var '{}'", sym)))
       })
     } else {
       Ok(expr.clone())

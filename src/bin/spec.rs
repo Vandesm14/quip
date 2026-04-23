@@ -12,37 +12,38 @@ fn main() {
     let path = entry.path();
     let source = std::fs::read_to_string(&path).unwrap();
 
-    let Some(line) = source.split('\n').next() else {
-      eprintln!("{}", path.display());
-      eprintln!("    expected at least one line");
-      eprintln!();
-      invalid += 1;
-      return;
-    };
-
     let mut expected = None;
 
-    const EXPECTED: &str = ";; expected:";
-    if let Some(source) = line.strip_prefix(EXPECTED) {
-      let source = source.trim();
-
-      let tokens = quip::ast::lex(source);
-      let exprs = quip::ast::parse(source, tokens).unwrap();
-      let mut runtime = Runtime::default();
-
-      let result = match runtime.eval_expr(&exprs[0]) {
-        Ok(result) => result,
-        Err(e) => {
+    for line in source.split('\n') {
+      const EXPECTED: &str = ";; expected:";
+      if let Some(source) = line.strip_prefix(EXPECTED) {
+        if expected.is_some() {
           eprintln!("{}", path.display());
-          eprintln!("    expected is invalid");
-          eprintln!("    {e}");
+          eprintln!("    expected is provided multiple times");
           eprintln!();
-          invalid += 1;
           return;
         }
-      };
 
-      expected = Some(result);
+        let source = source.trim();
+
+        let tokens = quip::ast::lex(source);
+        let exprs = quip::ast::parse(source, tokens).unwrap();
+        let mut runtime = Runtime::default();
+
+        let result = match runtime.eval_expr(&exprs[0]) {
+          Ok(result) => result,
+          Err(e) => {
+            eprintln!("{}", path.display());
+            eprintln!("    expected is invalid");
+            eprintln!("    {e}");
+            eprintln!();
+            invalid += 1;
+            return;
+          }
+        };
+
+        expected = Some(result);
+      }
     }
 
     let Some(expected) = expected else {

@@ -791,6 +791,31 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
       Ok(name.clone())
     },
   };
+  const DEF: Intrinsic = Intrinsic {
+    name: "def",
+    params: &[Param::One(ExprType::Symbol), Param::One(ExprType::Any)],
+    handler: |runtime, args| {
+      if let Some([name, val]) = args.get(0..2) {
+        let ExprKind::Symbol(sym) = &name.kind else {
+          return Err(
+            runtime
+              .error(ErrorReason::Message("def: invalid name".to_string())),
+          );
+        };
+        // TODO: reimplement by passing intrinsics key into the handler.
+        // if intrinsics.contains_key(sym.as_ref()) {
+        //   return Err(runtime.error(ErrorReason::Message(format!(
+        //     "'{sym}' is an intrinsic and cannot be redefined"
+        //   ))));
+        // }
+        let val = runtime.eval_expr(val)?;
+        runtime.context.define(sym.clone(), val.clone());
+        Ok(name.clone())
+      } else {
+        Err(runtime.error(ErrorReason::Message("invalid def".to_string())))
+      }
+    },
+  };
   const LAZY: Intrinsic = Intrinsic {
     name: "lazy",
     params: &[Param::One(ExprType::Any)],
@@ -855,6 +880,7 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
 
   map.insert("fn", FN);
   map.insert("defn", DEFN);
+  map.insert("def", DEF);
   map.insert("lazy", LAZY);
   map.insert("eval", EVAL);
   map.insert("call", CALL);

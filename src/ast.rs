@@ -220,10 +220,16 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
   tokens
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Expr {
   pub kind: ExprKind,
   pub span: Option<Span>,
+}
+
+impl PartialEq for Expr {
+  fn eq(&self, other: &Self) -> bool {
+    self.kind == other.kind
+  }
 }
 
 impl core::fmt::Display for Expr {

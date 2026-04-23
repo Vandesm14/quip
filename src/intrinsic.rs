@@ -792,7 +792,7 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
         runtime.error(ErrorReason::Message(format!("parse error: {err}")))
       })?;
       Ok(Expr {
-        kind: ExprKind::List(Rc::new(exprs)),
+        kind: ExprKind::List(Arc::new(exprs)),
         span: None,
       })
     },

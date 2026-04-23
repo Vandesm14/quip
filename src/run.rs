@@ -497,7 +497,7 @@ impl Runtime {
               exprs.push(arg.clone());
             }
             self.eval_expr(&Expr {
-              kind: ExprKind::Form(Rc::new(exprs)),
+              kind: ExprKind::Form(Arc::new(exprs)),
               span: None,
             })
           }

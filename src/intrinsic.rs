@@ -735,31 +735,13 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     name: "call",
     params: &[Param::One(ExprType::Any), Param::Many(ExprType::Any)],
     handler: |runtime, args| {
-      // First arg is unevaluated - evaluate it to get the function
       let expr = runtime.eval_expr(&args[0])?;
       if let ExprKind::Function { .. } = &expr.kind {
-        // It's a function - call it with the rest of the arguments
         runtime.call(
           &expr,
           args.get(1..).unwrap_or_default().to_vec(),
           "(call ...)",
         )
-      // TODO(thedevbird): This is a cool behavior, currying exists through it:
-      //                   (call (+) 1 2) ;; -> 3
-      //                   but it makes call do more than one or two things.
-      //                   This should be implemented by separating lists and
-      //                   forms where calling is just (<form/symbol/function>).
-      // } else if let ExprKind::List(list) = &fn_expr.kind {
-      //   // It's a list - try to evaluate it as a function call
-      //   // Add the rest of the arguments and evaluate
-      //   let mut new_list = (**list).clone();
-      //   for arg in args.get(1..).unwrap_or_default() {
-      //     new_list.push(arg.clone());
-      //   }
-      //   runtime.eval_expr(&Expr {
-      //     kind: ExprKind::List(Rc::new(new_list)),
-      //     span: None,
-      //   })
       } else {
         let expr = runtime.eval_expr(&expr)?;
         Ok(expr)

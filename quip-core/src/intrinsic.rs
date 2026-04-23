@@ -857,7 +857,7 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   };
   const DEF: Intrinsic = Intrinsic {
     name: "def",
-    params: &[Param::One(ExprType::Symbol), Param::One(ExprType::Any)],
+    params: &[Param::One(ExprType::Symbol), Param::EvalTo(ExprType::Any)],
     handler: |runtime, args| {
       if let Some([name, val]) = args.get(0..2) {
         let ExprKind::Symbol(sym) = &name.kind else {
@@ -872,7 +872,6 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
         //     "'{sym}' is an intrinsic and cannot be redefined"
         //   ))));
         // }
-        let val = runtime.eval_expr(val)?;
         runtime.context.define(sym.clone(), val.clone());
         Ok(name.clone())
       } else {
@@ -882,25 +881,24 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   };
   const SET: Intrinsic = Intrinsic {
     name: "set",
-    params: &[Param::One(ExprType::Symbol), Param::One(ExprType::Any)],
+    params: &[Param::One(ExprType::Symbol), Param::EvalTo(ExprType::Any)],
     handler: |runtime, args| {
-      if let Some([name, val]) = args.get(0..2) {
-        let ExprKind::Symbol(name) = &name.kind else {
-          return Err(
-            runtime
-              .error(ErrorReason::Message("set: invalid name".to_string())),
-          );
-        };
-        let val = runtime.eval_expr(val)?;
-        runtime
-          .context
-          .set(name.clone(), val.clone())
-          .map_err(ErrorReason::Message)
-          .map_err(|e| runtime.error(e))?;
-        Ok(val)
-      } else {
-        Err(runtime.error(ErrorReason::Message("invalid set".to_string())))
-      }
+      let [
+        Expr {
+          kind: ExprKind::Symbol(name),
+          ..
+        },
+        val,
+      ] = args.get(0..2).unwrap()
+      else {
+        unreachable!("handled by type-checker");
+      };
+      runtime
+        .context
+        .set(name.clone(), val.clone())
+        .map_err(ErrorReason::Message)
+        .map_err(|e| runtime.error(e))?;
+      Ok(val.clone())
     },
   };
   const LAZY: Intrinsic = Intrinsic {

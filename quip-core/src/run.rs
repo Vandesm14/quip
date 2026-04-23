@@ -230,68 +230,24 @@ impl Runtime {
               return result;
             }
 
-            match symbol.as_str() {
-              "recur" => {
-                self.recur = Some(list.get(1..).unwrap_or_default().to_vec());
-                Ok(Expr {
-                  kind: ExprKind::Nil,
-                  span: None,
-                })
-              }
-
-              "if" => {
-                let Some([cond_expr, body_expr]) = list.get(1..3) else {
-                  return Err(self.error(ErrorReason::CallError(CallError {
-                    symbol,
-                    kind: CallErrorKind::IncorrectArity {
-                      expected: 2,
-                      received: list.len() - 1,
-                    },
-                  })));
-                };
-                let cond = self.eval_expr(cond_expr)?;
-                if let ExprKind::Boolean(true) = cond.kind {
-                  let body = self.eval_expr(body_expr)?;
-                  if let ExprKind::Function { .. } = body.kind {
-                    self.call(
-                      &body,
-                      Vec::new(),
-                      &format!("(if {} {})", cond_expr, body_expr),
-                    )
-                  } else {
-                    Ok(body)
-                  }
-                } else {
-                  Ok(Expr {
-                    kind: ExprKind::Nil,
-                    span: None,
-                  })
-                }
-              }
-
-              _ => {
-                // Symbol look-up.
-                let val =
-                  self.context.get(symbol.as_str()).cloned().ok_or_else(
-                    || {
-                      self.error(ErrorReason::Message(format!(
-                        "undefined '{}'",
-                        symbol
-                      )))
-                    },
-                  )?;
-                if let ExprKind::Function { .. } = val.kind {
-                  let call_args = list.get(1..).unwrap_or(&[]);
-                  self.call(&val, call_args.to_vec(), symbol.as_ref())
-                } else if let ExprKind::Form(..) = val.kind {
-                  self.eval_expr(&val)
-                } else {
-                  Err(self.error(ErrorReason::Message(format!(
-                    "'{}' is not a function",
-                    symbol
-                  ))))
-                }
-              }
+            // Symbol look-up.
+            let val =
+              self.context.get(symbol.as_str()).cloned().ok_or_else(|| {
+                self.error(ErrorReason::Message(format!(
+                  "undefined '{}'",
+                  symbol
+                )))
+              })?;
+            if let ExprKind::Function { .. } = val.kind {
+              let call_args = list.get(1..).unwrap_or(&[]);
+              self.call(&val, call_args.to_vec(), symbol.as_ref())
+            } else if let ExprKind::Form(..) = val.kind {
+              self.eval_expr(&val)
+            } else {
+              Err(self.error(ErrorReason::Message(format!(
+                "'{}' is not a function",
+                symbol
+              ))))
             }
           }
           ExprKind::Error(_) => todo!("call errors = throw them?"),

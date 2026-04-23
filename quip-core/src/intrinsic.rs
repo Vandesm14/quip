@@ -964,6 +964,43 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
       })
     },
   };
+  const RECUR: Intrinsic = Intrinsic {
+    name: "recur",
+    params: &[Param::Many(ExprType::Any)],
+    handler: |runtime, args| {
+      runtime.recur = Some(args.to_vec());
+      Ok(Expr {
+        kind: ExprKind::Nil,
+        span: None,
+      })
+    },
+  };
+  const IF: Intrinsic = Intrinsic {
+    name: "if",
+    params: &[Param::EvalTo(ExprType::Boolean), Param::One(ExprType::Any)],
+    handler: |runtime, args| {
+      let [cond, body_expr] = args.get(0..2).unwrap() else {
+        unreachable!("handled by type-checker");
+      };
+      if let ExprKind::Boolean(true) = cond.kind {
+        let body = runtime.eval_expr(body_expr)?;
+        if let ExprKind::Function { .. } = body.kind {
+          runtime.call(
+            &body,
+            Vec::new(),
+            &format!("(if {} {})", cond, body_expr),
+          )
+        } else {
+          Ok(body)
+        }
+      } else {
+        Ok(Expr {
+          kind: ExprKind::Nil,
+          span: None,
+        })
+      }
+    },
+  };
 
   map.insert("fn", FN);
   map.insert("defn", DEFN);
@@ -974,6 +1011,8 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   map.insert("call", CALL);
   map.insert("do", DO);
   map.insert("parse", PARSE);
+  map.insert("recur", RECUR);
+  map.insert("if", IF);
 }
 
 pub fn error_ops(map: &mut HashMap<&'static str, Intrinsic>) {

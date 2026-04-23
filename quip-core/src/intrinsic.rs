@@ -718,6 +718,31 @@ pub fn io_ops(map: &mut HashMap<&'static str, Intrinsic>) {
 }
 
 pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
+  const FN: Intrinsic = Intrinsic {
+    name: "fn",
+    params: &[Param::One(ExprType::List), Param::Many(ExprType::Any)],
+    handler: |runtime, args| {
+      let Some(params_expr) = args.first() else {
+        return Err(runtime.error(ErrorReason::Message(
+          "fn: expected params list".to_string(),
+        )));
+      };
+      let ExprKind::List(param_list) = &params_expr.kind else {
+        return Err(runtime.error(ErrorReason::Message(
+          "fn: expected params list".to_string(),
+        )));
+      };
+      let params = Runtime::parse_params(param_list, "fn")
+        .map_err(|e| runtime.error(e.into()))?;
+      let body = args.get(1..).unwrap_or_default().to_vec();
+      let env = runtime.context.current();
+      Ok(Expr {
+        kind: ExprKind::Function { params, body, env },
+        // TODO: should there be a span?
+        span: None,
+      })
+    },
+  };
   const LAZY: Intrinsic = Intrinsic {
     name: "lazy",
     params: &[Param::One(ExprType::Any)],
@@ -780,6 +805,7 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     },
   };
 
+  map.insert("fn", FN);
   map.insert("lazy", LAZY);
   map.insert("eval", EVAL);
   map.insert("call", CALL);

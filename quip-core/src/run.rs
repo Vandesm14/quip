@@ -193,7 +193,7 @@ impl Runtime {
     Ok(result)
   }
 
-  fn parse_params(
+  pub(crate) fn parse_params(
     param_list: &[Expr],
     ctx: &str,
   ) -> Result<Vec<Rc<str>>, String> {
@@ -231,28 +231,6 @@ impl Runtime {
             }
 
             match symbol.as_str() {
-              "fn" => {
-                // (fn [params...] body...) -> function
-                let Some(params_expr) = list.get(1) else {
-                  return Err(self.error(ErrorReason::Message(
-                    "fn: expected params list".to_string(),
-                  )));
-                };
-                let ExprKind::List(param_list) = &params_expr.kind else {
-                  return Err(self.error(ErrorReason::Message(
-                    "fn: expected params list".to_string(),
-                  )));
-                };
-                let params = Self::parse_params(param_list, "fn")
-                  .map_err(|e| self.error(e.into()))?;
-                let body = list.get(2..).unwrap_or(&[]).to_vec();
-                let env = self.context.current();
-                Ok(Expr {
-                  kind: ExprKind::Function { params, body, env },
-                  span: expr.span,
-                })
-              }
-
               "defn" => {
                 // (defn name [params...] body...)  →  (def name (fn [params...] body...))
                 let Some([name, params_expr]) = list.get(1..3) else {

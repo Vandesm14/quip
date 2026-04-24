@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["quip-cli", "quip-core"]
+members = ["quip-cli", "quip-core", "quip-notebook"]
 
 [workspace.dependencies]
 slotmap = "1.1.1"

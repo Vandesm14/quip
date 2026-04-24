@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["quip-cli", "quip-core"]
+members = ["quip-cli", "quip-core", "quip-notebook"]
 
 [workspace.dependencies]
 itertools = "0.14.0"

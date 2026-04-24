@@ -68,12 +68,14 @@ To bypass evaluation and pass the raw expression, use `(lazy <expr>)` or `'<expr
 
 ## Functions
 
-Functions can be constructed by using `defn` for a named function and by `fn` for an anonymous function.
+Functions can be constructed by using `defn` or by using `def` and `fn`.
 
 ```clojure
 (defn add [a b] (+ 2 2))
 ;; or
 (def add (fn [a b] (+ 2 2)))
+
+;; both produce the same result
 ```
 
 When a form's symbol is a user-defined function, the evaluator will execute it with the arguments from the form.

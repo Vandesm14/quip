@@ -1,0 +1,17 @@
+procs:
+  kernel:
+    autostart: false
+    cmd:
+      - cargo
+      - run
+      - --bin
+      - quip-kernel
+  notebook:
+    autostart: false
+    cmd:
+      - cargo
+      - run
+      - --bin
+      - quip-notebook
+
+hide_keymap_window: true

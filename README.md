@@ -1,6 +1,7 @@
 # Quip
 
-In development, docs/behavior/implementations/else may be incomplete or undocumented.
+> [!WARNING]
+> In development, docs/behavior/implementations/else may be incomplete or undocumented.
 
 ## Purpose
 

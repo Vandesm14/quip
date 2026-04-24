@@ -6,7 +6,10 @@ use std::{
 
 use slotmap::{DefaultKey, SlotMap};
 
-use crate::ast::{Expr, ExprKind};
+use crate::{
+  ast::{Expr, ExprKind},
+  intrinsic::Intrinsic,
+};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Scope {
@@ -25,6 +28,7 @@ impl Scope {
 
 #[derive(Debug, Clone)]
 pub struct Context {
+  intrinsics: HashMap<&'static str, Intrinsic>,
   envs: SlotMap<DefaultKey, Scope>,
   current: DefaultKey,
   gc_threshold: usize,
@@ -36,6 +40,7 @@ impl Default for Context {
     let mut envs = SlotMap::new();
     let current = envs.insert(Scope::new(None));
     Self {
+      intrinsics: HashMap::default(),
       envs,
       current,
       root_id: current,
@@ -62,6 +67,25 @@ impl Context {
       .envs
       .get(self.current())
       .expect("there should always be at least one scope")
+  }
+
+  pub fn with_intrinsics(
+    mut self,
+    intrinsics: HashMap<&'static str, Intrinsic>,
+  ) -> Self {
+    self.use_intrinsics(intrinsics);
+    self
+  }
+
+  pub fn use_intrinsics(
+    &mut self,
+    intrinsics: HashMap<&'static str, Intrinsic>,
+  ) {
+    self.intrinsics = intrinsics;
+  }
+
+  pub fn get_intrinsic(&self, name: &str) -> Option<&Intrinsic> {
+    self.intrinsics.get(name)
   }
 
   pub fn get(&self, name: &str) -> Option<&Expr> {

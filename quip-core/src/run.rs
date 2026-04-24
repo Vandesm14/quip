@@ -217,8 +217,9 @@ impl Runtime {
             let symbol = symbol.to_string();
 
             // Check for intrinsics first.
-            let intrinsics = crate::intrinsic::all();
-            if let Some(intrinsic) = intrinsics.get(symbol.as_str()) {
+            if let Some(intrinsic) =
+              self.context.get_intrinsic(symbol.as_str()).cloned()
+            {
               let args = intrinsic.check_params(self, list, &symbol)?;
               self.call_stack.push(CallFrame {
                 expr: expr.clone(),
@@ -311,7 +312,10 @@ mod tests {
   fn run(source: &str) -> Result<Expr, String> {
     let tokens = lex(source);
     let exprs = parse(source, tokens)?;
+
     let mut runtime = Runtime::default();
+    runtime.context.use_intrinsics(crate::intrinsic::all());
+
     let mut last = Expr {
       kind: ExprKind::Nil,
       span: None,
@@ -320,16 +324,6 @@ mod tests {
       last = runtime.eval_expr(expr).map_err(|e| e.to_string())?;
     }
     Ok(last)
-  }
-
-  fn run_runtime(source: &str) -> Runtime {
-    let tokens = lex(source);
-    let exprs = parse(source, tokens).unwrap();
-    let mut runtime = Runtime::default();
-    for expr in &exprs {
-      runtime.eval_expr(expr).unwrap();
-    }
-    runtime
   }
 
   fn eval_source(runtime: &mut Runtime, source: &str) -> Expr {
@@ -1684,9 +1678,8 @@ mod tests {
 
     #[test]
     fn function_scopes_are_isolated() {
-      let source: &'static str = "((fn [] (def a 0)))";
-      let runtime = run_runtime(source);
-      assert!(runtime.context.get("a").is_none());
+      let result = run("(def a 0) ((fn [] (def a 1))) a").unwrap();
+      assert_eq!(result.kind, ExprKind::Integer(0));
     }
 
     #[test]
@@ -1819,6 +1812,8 @@ mod tests {
         context: Context::new(10),
         ..Default::default()
       };
+      runtime.context.use_intrinsics(crate::intrinsic::all());
+
       assert!(!runtime.context.should_gc());
 
       eval_source(&mut runtime, "((fn [] nil)) ((fn [] nil))");
@@ -1831,6 +1826,8 @@ mod tests {
         context: Context::new(3),
         ..Default::default()
       };
+      runtime.context.use_intrinsics(crate::intrinsic::all());
+
       assert!(!runtime.context.should_gc());
 
       eval_source(&mut runtime, "(call (fn [] nil))");
@@ -1846,6 +1843,7 @@ mod tests {
     #[test]
     fn gc_removes_orphaned_call_scopes() {
       let mut runtime = Runtime::default();
+      runtime.context.use_intrinsics(crate::intrinsic::all());
 
       eval_source(
         &mut runtime,
@@ -1860,6 +1858,7 @@ mod tests {
     #[test]
     fn gc_removes_scope_of_overwritten_closure() {
       let mut runtime = Runtime::default();
+      runtime.context.use_intrinsics(crate::intrinsic::all());
 
       eval_source(
         &mut runtime,
@@ -1881,6 +1880,7 @@ mod tests {
     #[test]
     fn gc_preserves_root_scope() {
       let mut runtime = Runtime::default();
+      runtime.context.use_intrinsics(crate::intrinsic::all());
 
       eval_source(&mut runtime, "(def x 42) ((fn [] nil)) ((fn [] nil))");
       runtime.context.trigger_gc();
@@ -1892,6 +1892,7 @@ mod tests {
     #[test]
     fn gc_preserves_live_closure() {
       let mut runtime = Runtime::default();
+      runtime.context.use_intrinsics(crate::intrinsic::all());
 
       eval_source(
         &mut runtime,
@@ -1924,6 +1925,7 @@ mod tests {
     #[test]
     fn gc_preserves_closure_parent_chain() {
       let mut runtime = Runtime::default();
+      runtime.context.use_intrinsics(crate::intrinsic::all());
 
       eval_source(
         &mut runtime,
@@ -1948,6 +1950,7 @@ mod tests {
     #[test]
     fn gc_preserves_multiple_closures_sharing_state() {
       let mut runtime = Runtime::default();
+      runtime.context.use_intrinsics(crate::intrinsic::all());
 
       eval_source(
         &mut runtime,
@@ -1973,6 +1976,7 @@ mod tests {
     #[test]
     fn gc_is_deterministic() {
       let mut runtime = Runtime::default();
+      runtime.context.use_intrinsics(crate::intrinsic::all());
 
       eval_source(
         &mut runtime,

@@ -50,6 +50,8 @@ fn run_repl() {
   );
 
   let mut runtime = Runtime::default();
+  runtime.context.use_intrinsics(quip_core::intrinsic::all());
+
   loop {
     match repl.read_line(&prompt) {
       Ok(Signal::CtrlC) | Ok(Signal::CtrlD) => {
@@ -65,6 +67,7 @@ fn run_repl() {
           ":exit" => break,
           ":reset" => {
             runtime = Runtime::default();
+            runtime.context.use_intrinsics(quip_core::intrinsic::all());
             println!("context reset");
             continue;
           }
@@ -136,6 +139,8 @@ fn run_source(source: &str) {
   };
 
   let mut runtime = Runtime::default();
+  runtime.context.use_intrinsics(quip_core::intrinsic::all());
+
   for expr in &exprs {
     if let Err(e) = runtime.eval_expr(expr) {
       eprintln!("error: {e}");

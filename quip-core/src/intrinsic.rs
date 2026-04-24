@@ -48,6 +48,7 @@ pub enum Param {
   ManyEvalTo(ExprType),
 }
 
+#[derive(Debug, Clone)]
 pub struct Intrinsic {
   pub params: &'static [Param],
   pub handler: fn(&mut Runtime, Vec<Expr>) -> Result<Expr, Error>,

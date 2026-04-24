@@ -9,20 +9,22 @@
 (defn assert [msg expr]
   (if (not expr)
     (throw (error msg))))
+(defn assert-eq [msg lhs rhs]
+  (assert msg (= lhs rhs)))
 (assert "asserts work" true)
 
 (def list [])
 (each "hello" (fn [el] (set list (push list el))))
 
-(assert "e2e: each and scopes" (= list ["h" "e" "l" "l" "o"]))
+(assert-eq "e2e: each and scopes" list ["h" "e" "l" "l" "o"])
 
-(assert "lazy list"       (= (parse "'(+ (1 2))") '[(lazy (+ (1 2)))]))
-(assert "lazy inner list" (= (parse "(+ '(1 2))") '[(+ (lazy (1 2)))]))
-(assert "lazy both"       (= (parse "'(+ '(1 2))") '[(lazy (+ (lazy (1 2))))]))
+(assert-eq "lazy list"       (parse "'(+ (1 2))")  '[(lazy (+ (1 2)))])
+(assert-eq "lazy inner list" (parse "(+ '(1 2))")  '[(+ (lazy (1 2)))])
+(assert-eq "lazy both"       (parse "'(+ '(1 2))") '[(lazy (+ (lazy (1 2))))])
 
-(assert "curry empty"          (= (() + 1 2) 3))
-(assert "curry symbol"         (= ((+) 1 2) 3))
-(assert "curry symbol and arg" (= ((+ 1) 2) 3))
-(assert "curry whole"          (= ((+ 1 2)) 3))
+(assert-eq "curry empty"          (() + 1 2) 3)
+(assert-eq "curry symbol"         ((+) 1 2)  3)
+(assert-eq "curry symbol and arg" ((+ 1) 2)  3)
+(assert-eq "curry whole"          ((+ 1 2))  3)
 
 (print "all tests pass")

@@ -10,7 +10,7 @@
 
 use std::{path::PathBuf, process::ExitCode};
 
-use quip::kernel::{connection::ConnectionInfo, server};
+use quip_kernel::{connection::ConnectionInfo, server};
 
 fn main() -> ExitCode {
   let args: Vec<String> = std::env::args().collect();

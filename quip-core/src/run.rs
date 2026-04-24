@@ -1,10 +1,4 @@
-use std::rc::Rc;
-use std::{
-  borrow::Cow,
-  sync::{Arc, Mutex},
-};
-
-use slotmap::DefaultKey;
+use std::sync::{Arc, Mutex};
 
 use crate::{
   ast::{Expr, ExprKind, Span},
@@ -15,9 +9,9 @@ use crate::{
 //                  Result's produced during evaluation.
 #[derive(Debug, Clone)]
 pub struct Error {
-  pub reason: Rc<ErrorReason>,
-  pub call_stack: Rc<[CallFrame]>,
-  pub scope: Rc<Scope>,
+  pub reason: Arc<ErrorReason>,
+  pub call_stack: Arc<[CallFrame]>,
+  pub scope: Arc<Scope>,
 }
 
 impl core::fmt::Display for Error {
@@ -228,7 +222,7 @@ impl Runtime {
   pub(crate) fn parse_params(
     param_list: &[Expr],
     ctx: &str,
-  ) -> Result<Vec<Rc<str>>, String> {
+  ) -> Result<Vec<Arc<str>>, String> {
     param_list
       .iter()
       .map(|p| {
@@ -290,7 +284,7 @@ impl Runtime {
               exprs.push(arg.clone());
             }
             self.eval_expr(&Expr {
-              kind: ExprKind::Form(Rc::new(exprs)),
+              kind: ExprKind::Form(Arc::new(exprs)),
               span: None,
             })
           }
@@ -1152,7 +1146,7 @@ mod tests {
       #[test]
       fn list_with_no_arguments() {
         let result = run("(list)").unwrap();
-        assert_eq!(result.kind, ExprKind::List(Rc::new(vec![])));
+        assert_eq!(result.kind, ExprKind::List(Arc::new(vec![])));
       }
 
       #[test]

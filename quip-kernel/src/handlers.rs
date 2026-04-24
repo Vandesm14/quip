@@ -4,16 +4,16 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 
-use crate::{
+use quip_core::{
   ast::{Expr, ExprKind, lex, parse},
-  run::{Output, Runtime},
+  run::{ErrorReason, Output, Runtime},
 };
 
 use super::message::{Header, Message};
 
 /// Shared state between the shell/control handlers.
 pub struct KernelState {
-  pub runtime: Runtime<'static>,
+  pub runtime: Runtime,
   pub execution_count: u64,
   pub session_id: String,
   /// Where `(print ...)` accumulates lines during an execute_request.
@@ -23,7 +23,7 @@ pub struct KernelState {
 impl KernelState {
   pub fn new(session_id: String) -> Self {
     let print_buffer = Arc::new(Mutex::new(Vec::new()));
-    let runtime = Runtime::<'static> {
+    let runtime = Runtime {
       output: Output::Buffered(Arc::clone(&print_buffer)),
       ..Default::default()
     };
@@ -223,8 +223,8 @@ pub fn handle_execute(
   // Tokenize and parse. Converting to owned Exprs lets us drop `code` after
   // parsing without violating the runtime's lifetime invariants.
   let tokens = lex(&code);
-  let owned_exprs: Result<Vec<Expr<'static>>, String> = parse(&code, tokens)
-    .map(|exprs| exprs.into_iter().map(Expr::into_owned).collect());
+  let owned_exprs: Result<Vec<Expr>, String> =
+    parse(&code, tokens).map(|exprs| exprs.into_iter().collect());
 
   match owned_exprs {
     Err(err) => {
@@ -260,8 +260,8 @@ pub fn handle_execute(
       }
     }
     Ok(exprs) => {
-      let mut last_value: Option<Expr<'static>> = None;
-      let mut runtime_error: Option<crate::run::Error> = None;
+      let mut last_value: Option<Expr> = None;
+      let mut runtime_error: Option<quip_core::run::Error> = None;
 
       for expr in &exprs {
         match state.runtime.eval_expr(expr) {
@@ -393,16 +393,16 @@ fn flush_stream_iopub(state: &mut KernelState, request: &Message) -> Message {
 
 /// Choose how to render an evaluated expression for `text/plain` display.
 /// `Nil` results are suppressed (no `execute_result` emitted).
-fn render_result(expr: &Expr<'static>) -> Option<String> {
+fn render_result(expr: &Expr) -> Option<String> {
   match &expr.kind {
     ExprKind::Nil => None,
     _ => Some(expr.to_string()),
   }
 }
 
-fn error_ename(err: &crate::run::Error) -> String {
-  match err {
-    crate::run::Error::CallError(_) => "CallError".to_string(),
-    crate::run::Error::Message(_) => "RuntimeError".to_string(),
+fn error_ename(err: &quip_core::run::Error) -> String {
+  match err.reason.as_ref() {
+    ErrorReason::CallError(_) => "CallError".to_string(),
+    ErrorReason::Message(_) => "RuntimeError".to_string(),
   }
 }

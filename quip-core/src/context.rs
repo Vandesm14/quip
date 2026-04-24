@@ -1,7 +1,7 @@
 use std::{
   collections::{HashMap, HashSet},
   panic,
-  rc::Rc,
+  sync::Arc,
 };
 
 use slotmap::{DefaultKey, SlotMap};
@@ -10,7 +10,7 @@ use crate::ast::{Expr, ExprKind};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Scope {
-  pub vars: HashMap<Rc<str>, Expr>,
+  pub vars: HashMap<Arc<str>, Expr>,
   pub parent: Option<DefaultKey>,
 }
 
@@ -77,11 +77,11 @@ impl Context {
     }
   }
 
-  pub fn define(&mut self, name: Rc<str>, val: Expr) {
+  pub fn define(&mut self, name: Arc<str>, val: Expr) {
     self.envs[self.current].vars.insert(name, val);
   }
 
-  pub fn set(&mut self, name: Rc<str>, val: Expr) -> Result<(), String> {
+  pub fn set(&mut self, name: Arc<str>, val: Expr) -> Result<(), String> {
     let mut idx = self.current;
     loop {
       #[allow(clippy::map_entry)]

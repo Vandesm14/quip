@@ -65,10 +65,6 @@ To bypass evaluation and pass the raw expression, use `(lazy <expr>)` or `'<expr
 (print '(+ 1 2))       ;; -> (+ 1 2)
 ```
 
-### Special Cases
-
-There are some special cases to
-
 ## Functions
 
 Functions can be constructed by using `defn` for a named function and by `fn` for an anonymous function.

@@ -730,7 +730,9 @@ pub fn io_ops(map: &mut HashMap<&'static str, Intrinsic>) {
         .iter()
         .map(|expr| runtime.eval_expr(expr).map(|e| e.to_string()))
         .collect::<Result<Vec<_>, _>>()?;
-      println!("{}", parts.join(" "));
+      let line = parts.join(" ");
+      runtime.output.write_line(&line);
+      println!("{}", line);
       Ok(Expr {
         kind: ExprKind::Nil,
         span: None,

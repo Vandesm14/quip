@@ -28,7 +28,7 @@ fn main() {
 
         let source = source.trim();
 
-        let tokens = quip_core::ast::lex(source);
+        let tokens = quip_core::ast::lex(source, Default::default());
         let exprs = quip_core::ast::parse(source, tokens).unwrap();
 
         let mut runtime = quip_core::run::Runtime::default();
@@ -58,7 +58,7 @@ fn main() {
       return;
     };
 
-    let tokens = quip_core::ast::lex(&source);
+    let tokens = quip_core::ast::lex(&source, Default::default());
     let exprs = quip_core::ast::parse(&source, tokens).unwrap();
     let mut runtime = quip_core::run::Runtime::default();
     runtime.context.use_intrinsics(quip_core::intrinsic::all());

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Request {
   Init,
+  Ping,
   Eval { id: usize, source: String },
 }
 
@@ -15,9 +16,15 @@ pub enum Response {
     id: usize,
     result: Result<String, String>,
   },
+  Pong,
+
+  // Internal client events.
+  #[serde(skip)]
+  KernelConnected,
+  #[serde(skip)]
+  KernelDisconnected,
 }
 
-/// Big-endian u64 length + UTF-8 JSON. Same layout for requests and responses.
 pub fn read_framed_json<T: DeserializeOwned>(
   r: &mut impl Read,
 ) -> io::Result<T> {

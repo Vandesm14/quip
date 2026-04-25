@@ -1,8 +1,10 @@
-use quip::run::Runtime;
 use std::path::Path;
 
 fn main() {
-  let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("spec");
+  let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+    .parent()
+    .unwrap()
+    .join("spec");
 
   let mut ok: usize = 0;
   let mut failed: usize = 0;
@@ -26,9 +28,11 @@ fn main() {
 
         let source = source.trim();
 
-        let tokens = quip::ast::lex(source);
-        let exprs = quip::ast::parse(source, tokens).unwrap();
-        let mut runtime = Runtime::default();
+        let tokens = quip_core::ast::lex(source);
+        let exprs = quip_core::ast::parse(source, tokens).unwrap();
+
+        let mut runtime = quip_core::run::Runtime::default();
+        // runtime.context.use_intrinsics(quip_core::intrinsic::all());
 
         let result = match runtime.eval_expr(&exprs[0]) {
           Ok(result) => result,
@@ -54,9 +58,10 @@ fn main() {
       return;
     };
 
-    let tokens = quip::ast::lex(&source);
-    let exprs = quip::ast::parse(&source, tokens).unwrap();
-    let mut runtime = Runtime::default();
+    let tokens = quip_core::ast::lex(&source);
+    let exprs = quip_core::ast::parse(&source, tokens).unwrap();
+    let mut runtime = quip_core::run::Runtime::default();
+    runtime.context.use_intrinsics(quip_core::intrinsic::all());
 
     for expr in &exprs {
       match runtime.eval_expr(expr) {

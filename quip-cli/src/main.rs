@@ -78,7 +78,7 @@ fn run_repl() {
           _ => {}
         }
 
-        let tokens = lex(&line);
+        let tokens = lex(&line, Default::default());
 
         match parse(&line, tokens) {
           Ok(exprs) => {
@@ -129,7 +129,7 @@ fn run_file(input: &PathBuf) {
 }
 
 fn run_source(source: &str) {
-  let tokens = lex(source);
+  let tokens = lex(source, Default::default());
   let exprs = match parse(source, tokens) {
     Ok(e) => e,
     Err(e) => {

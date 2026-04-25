@@ -310,7 +310,7 @@ mod tests {
   use crate::ast::{lex, parse};
 
   fn run(source: &str) -> Result<Expr, String> {
-    let tokens = lex(source);
+    let tokens = lex(source, Default::default());
     let exprs = parse(source, tokens)?;
 
     let mut runtime = Runtime::default();
@@ -327,7 +327,7 @@ mod tests {
   }
 
   fn eval_source(runtime: &mut Runtime, source: &str) -> Expr {
-    let tokens = lex(source);
+    let tokens = lex(source, Default::default());
     let exprs = parse(source, tokens).unwrap();
     let mut last = Expr {
       kind: ExprKind::Nil,

@@ -80,6 +80,9 @@ pub enum TokenKind {
   Invalid,
   Eof,
 
+  Whitespace,
+  Comment,
+
   LeftParen,
   RightParen,
   LeftSquare,
@@ -92,8 +95,31 @@ pub enum TokenKind {
   String,
   Symbol,
   Keyword,
+}
 
-  Comment,
+impl TokenKind {
+  pub fn can_skip(self) -> bool {
+    match self {
+      Self::Invalid => false,
+      Self::Eof => false,
+
+      Self::Whitespace => true,
+      Self::Comment => true,
+
+      Self::LeftParen => false,
+      Self::RightParen => false,
+      Self::LeftSquare => false,
+      Self::RightSquare => false,
+
+      Self::Lazy => false,
+
+      Self::Integer => false,
+      Self::Float => false,
+      Self::String => false,
+      Self::Symbol => false,
+      Self::Keyword => false,
+    }
+  }
 }
 
 impl fmt::Display for TokenKind {
@@ -101,6 +127,9 @@ impl fmt::Display for TokenKind {
     match self {
       Self::Invalid => write!(f, "invalid characters"),
       Self::Eof => write!(f, "end of file"),
+
+      Self::Whitespace => write!(f, "whitespace"),
+      Self::Comment => write!(f, "a comment"),
 
       Self::LeftParen => write!(f, "'('"),
       Self::RightParen => write!(f, "')'"),
@@ -114,8 +143,6 @@ impl fmt::Display for TokenKind {
       Self::Keyword => write!(f, "a keyword literal"),
 
       Self::Lazy => write!(f, "'"),
-
-      Self::Comment => write!(f, "a comment"),
     }
   }
 }
@@ -125,7 +152,13 @@ const SYMBOL_CHARS: &[char] = &[
   '<', '.', '>', '?', '/',
 ];
 
-pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
+#[derive(Default)]
+pub struct LexOptions {
+  pub include_whitespace: bool,
+  pub include_comments: bool,
+}
+
+pub fn lex(source: impl AsRef<str>, options: LexOptions) -> Vec<Token> {
   let source = source.as_ref();
 
   // TODO: -1-2 will be two integers because we don't check that a space (or other delimiter such as parens) follow it.
@@ -172,8 +205,22 @@ pub fn lex(source: impl AsRef<str>) -> Vec<Token> {
             current = None;
           }
         }
+
+        TokenKind::Whitespace => {
+          if !char.is_whitespace() {
+            if options.include_whitespace {
+              tokens.push(token.end(i));
+            }
+
+            current = None;
+          }
+        }
         TokenKind::Comment => {
           if char == '\n' {
+            if options.include_comments {
+              tokens.push(token.end(i));
+            }
+
             current = None;
           }
         }
@@ -636,7 +683,8 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Expr>, String> {
         }
       }
 
-      // TODO(leonskij): It would nice to include comments in debug information.
+      TokenKind::Whitespace => {}
+      // TODO(leonskij): Would it be nice to include comments in debug information?
       TokenKind::Comment => {}
     }
   }

@@ -918,7 +918,7 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
       let ExprKind::String(ref str) = args.first().unwrap().kind else {
         unreachable!("type-checker validates types");
       };
-      let tokens = lex(str);
+      let tokens = lex(str, Default::default());
       let exprs = parse(str, tokens).map_err(|err| {
         runtime.error(ErrorReason::Message(format!("parse error: {err}")))
       })?;

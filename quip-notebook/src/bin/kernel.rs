@@ -28,6 +28,11 @@ fn main() {
           runtime = Runtime::default();
           runtime.context.use_intrinsics(quip_core::intrinsic::all());
         }
+        Request::Ping => {
+          if write_framed_json(&mut stream, &Response::Pong).is_err() {
+            break;
+          }
+        }
         Request::Eval { id, source } => {
           let result: Result<String, String> = (|| {
             let tokens = lex(&source);

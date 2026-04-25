@@ -1,33 +1,87 @@
-use std::{net::TcpStream, sync::mpsc, thread};
+use std::net::TcpStream;
+use std::sync::mpsc;
+use std::sync::mpsc::RecvTimeoutError;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui::{Event, Key, Modifiers, RichText};
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
 use quip_notebook::{Request, Response, read_framed_json, write_framed_json};
 
+const KERNEL_ADDR: &str = "127.0.0.1:7478";
+const CONNECT_RETRY: Duration = Duration::from_millis(500);
+const RECV_POLL: Duration = Duration::from_millis(150);
+const IDLE_HEARTBEAT: Duration = Duration::from_secs(2);
+
+fn io_thread(
+  ctx: egui::Context,
+  rx: mpsc::Receiver<Request>,
+  tx: mpsc::Sender<Response>,
+) {
+  'session: loop {
+    let mut stream = loop {
+      match TcpStream::connect(KERNEL_ADDR) {
+        Ok(s) => break s,
+        Err(_) => thread::sleep(CONNECT_RETRY),
+      }
+    };
+
+    write_framed_json(&mut stream, &Request::Init).ok();
+    tx.send(Response::KernelConnected).ok();
+    ctx.request_repaint();
+
+    let mut last_io = Instant::now();
+
+    loop {
+      match rx.recv_timeout(RECV_POLL) {
+        Ok(req) => {
+          if write_framed_json(&mut stream, &req).is_err() {
+            break;
+          }
+          if let Request::Eval { .. } = &req {
+            match read_framed_json::<Response>(&mut stream) {
+              Ok(resp @ Response::Eval { .. }) => {
+                last_io = Instant::now();
+                tx.send(resp).ok();
+                ctx.request_repaint();
+              }
+              _ => break,
+            }
+          } else {
+            last_io = Instant::now();
+          }
+        }
+        Err(RecvTimeoutError::Timeout) => {
+          if last_io.elapsed() < IDLE_HEARTBEAT {
+            continue;
+          }
+          let alive = write_framed_json(&mut stream, &Request::Ping).is_ok()
+            && matches!(
+              read_framed_json::<Response>(&mut stream),
+              Ok(Response::Pong)
+            );
+          if alive {
+            last_io = Instant::now();
+          } else {
+            tx.send(Response::KernelDisconnected).ok();
+            ctx.request_repaint();
+            while rx.try_recv().is_ok() {}
+            continue 'session;
+          }
+        }
+        Err(RecvTimeoutError::Disconnected) => return,
+      }
+    }
+
+    while rx.try_recv().is_ok() {}
+  }
+}
+
 fn main() {
   let native_options = eframe::NativeOptions::default();
   let (request_sender, request_receiver) = mpsc::channel();
   let (reply_sender, reply_receiver) = mpsc::channel();
-
-  thread::spawn(move || {
-    let mut stream = TcpStream::connect("127.0.0.1:7478").unwrap();
-    for req in request_receiver {
-      if write_framed_json(&mut stream, &req).is_err() {
-        break;
-      }
-      if let Request::Eval { .. } = &req {
-        let resp: Result<Response, _> = read_framed_json(&mut stream);
-        if let Ok(resp) = resp {
-          if reply_sender.send(resp).is_err() {
-            break;
-          }
-        } else {
-          break;
-        }
-      }
-    }
-  });
 
   eframe::run_native(
     "Quip",
@@ -35,7 +89,10 @@ fn main() {
     Box::new(|cc| {
       Ok(Box::new(NotebookApp::new(
         cc,
-        (request_sender, reply_receiver),
+        request_sender,
+        request_receiver,
+        reply_sender,
+        reply_receiver,
       )))
     }),
   )
@@ -65,6 +122,7 @@ struct NotebookApp {
   channel: Channel,
   cells: Vec<Cell>,
   next_id: usize,
+  kernel_connected: bool,
 
   // Selection.
   selected: usize,
@@ -73,14 +131,31 @@ struct NotebookApp {
 }
 
 impl NotebookApp {
-  fn new(_: &eframe::CreationContext<'_>, channel: Channel) -> Self {
+  fn new(
+    cc: &eframe::CreationContext<'_>,
+    request_sender: mpsc::Sender<Request>,
+    request_receiver: mpsc::Receiver<Request>,
+    reply_sender: mpsc::Sender<Response>,
+    reply_receiver: mpsc::Receiver<Response>,
+  ) -> Self {
+    let egui_ctx = cc.egui_ctx.clone();
+    thread::spawn(move || io_thread(egui_ctx, request_receiver, reply_sender));
     Self {
-      channel,
+      channel: (request_sender, reply_receiver),
       cells: vec![Cell::default()],
       next_id: 1,
+      kernel_connected: false,
       selected: 0,
       focus_index: None,
       focus_served: false,
+    }
+  }
+
+  fn reset_cells_after_kernel_loss(&mut self) {
+    for c in &mut self.cells {
+      c.result = None;
+      c.pending = false;
+      c.run_count = 0;
     }
   }
 
@@ -164,8 +239,17 @@ impl NotebookApp {
 impl eframe::App for NotebookApp {
   fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
     let ctx = ui.ctx().clone();
-    for reply in self.channel.1.try_iter() {
+    let pending: Vec<Response> = self.channel.1.try_iter().collect();
+    for reply in pending {
       match reply {
+        Response::KernelConnected => {
+          self.kernel_connected = true;
+          self.reset_cells_after_kernel_loss();
+        }
+        Response::KernelDisconnected => {
+          self.kernel_connected = false;
+          self.reset_cells_after_kernel_loss();
+        }
         Response::Eval { id, result } => {
           if let Some(ref mut cell) = self.cells.iter_mut().find(|c| c.id == id)
           {
@@ -174,6 +258,8 @@ impl eframe::App for NotebookApp {
             cell.result = Some(result);
           }
         }
+        // Consumed in the other thread.
+        Response::Pong => {}
       }
     }
 
@@ -198,6 +284,21 @@ impl eframe::App for NotebookApp {
     };
 
     egui::CentralPanel::default().show_inside(ui, |ui| {
+      if !self.kernel_connected {
+        let warn = if dark {
+          egui::Color32::from_rgb(255, 200, 120)
+        } else {
+          egui::Color32::from_rgb(150, 75, 0)
+        };
+        ui.label(
+          RichText::new(format!(
+            "Kernel not connected ({KERNEL_ADDR}). Retrying..."
+          ))
+          .color(warn),
+        );
+        ui.add_space(4.0);
+      }
+
       egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {

@@ -61,14 +61,14 @@ impl Cell {
 type Channel = (mpsc::Sender<Request>, mpsc::Receiver<Response>);
 
 struct NotebookApp {
+  // Cells and execution.
   channel: Channel,
   cells: Vec<Cell>,
   next_id: usize,
-  /// Active cell: keyboard shortcuts and highlight target.
+
+  // Selection.
   selected: usize,
-  /// One-shot: focus the editor for this index after navigation.
   focus_index: Option<usize>,
-  /// If true, a cell asked for focus this frame; clear [focus_index] at end of frame.
   focus_served: bool,
 }
 
@@ -279,13 +279,20 @@ impl eframe::App for NotebookApp {
                       self.selected = i;
                       self.run_cell(i);
                     }
+                    if ui.button("Delete").clicked() {
+                      self.cells.remove(i);
+                    }
                   });
                   let id = {
-                    let cell = self.cells.get(i).expect("i in range");
+                    let Some(cell) = self.cells.get(i) else {
+                      return;
+                    };
                     cell.id
                   };
                   let out = {
-                    let cell = self.cells.get_mut(i).expect("i in range");
+                    let Some(cell) = self.cells.get_mut(i) else {
+                      return;
+                    };
                     CodeEditor::default()
                       .id_source(format!("quip_cell_{}", id))
                       .vscroll(false)
@@ -306,7 +313,9 @@ impl eframe::App for NotebookApp {
                     }
                   }
                   {
-                    let cell = self.cells.get(i).expect("i in range");
+                    let Some(cell) = self.cells.get(i) else {
+                      return;
+                    };
                     if let Some(ref r) = cell.result {
                       ui.add_space(2.0);
                       let monos = ui

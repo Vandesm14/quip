@@ -3,6 +3,5 @@ resolver = "3"
 members = ["quip-cli", "quip-core"]
 
 [workspace.dependencies]
-itertools = "0.14.0"
 slotmap = "1.1.1"
 thiserror = "2.0.18"

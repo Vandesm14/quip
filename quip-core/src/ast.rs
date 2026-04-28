@@ -1,7 +1,6 @@
 use core::{cmp::Ordering, fmt, ops, ops::Range};
 use std::{collections::HashMap, rc::Rc};
 
-use itertools::Itertools;
 use slotmap::DefaultKey;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -387,19 +386,42 @@ impl core::fmt::Display for ExprKind {
       ExprKind::Float(float) => write!(f, "{}", float),
       ExprKind::Integer(integer) => write!(f, "{}", integer),
       ExprKind::List(exprs) => {
-        write!(f, "[{}]", exprs.iter().map(|e| e.to_string()).join(" "))
+        write!(f, "[")?;
+
+        core::iter::once("")
+          .chain(core::iter::repeat(" "))
+          .zip(exprs.iter())
+          .try_for_each(|(s, e)| write!(f, "{s}{e}"))?;
+
+        write!(f, "]")
       }
       ExprKind::Form(exprs) => {
-        write!(f, "({})", exprs.iter().map(|e| e.to_string()).join(" "))
+        write!(f, "(")?;
+
+        core::iter::once("")
+          .chain(core::iter::repeat(" "))
+          .zip(exprs.iter())
+          .try_for_each(|(s, e)| write!(f, "{s}{e}"))?;
+
+        write!(f, ")")
       }
       ExprKind::Map(_) => todo!(),
       ExprKind::Function { params, body, .. } => {
-        write!(
-          f,
-          "Fn([{}] {})",
-          params.iter().join(" "),
-          body.iter().join(" ")
-        )
+        write!(f, "Fn([")?;
+
+        core::iter::once("")
+          .chain(core::iter::repeat(" "))
+          .zip(params.iter())
+          .try_for_each(|(s, p)| write!(f, "{s}{p}"))?;
+
+        write!(f, "] ")?;
+
+        core::iter::once("")
+          .chain(core::iter::repeat(" "))
+          .zip(body.iter())
+          .try_for_each(|(s, b)| write!(f, "{s}{b}"))?;
+
+        write!(f, ")")
       }
     }
   }

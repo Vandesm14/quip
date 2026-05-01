@@ -1539,6 +1539,484 @@ mod tests {
     }
   }
 
+  mod map {
+    use super::*;
+
+    mod constructor {
+      use super::*;
+
+      #[test]
+      fn empty_map() {
+        let result = run("(map)").unwrap();
+        assert!(matches!(result.kind, ExprKind::Map(ref m) if m.is_empty()));
+      }
+
+      #[test]
+      fn map_with_one_pair() {
+        let result = run("(map \"a\" 1)").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m.len(), 1);
+        assert_eq!(m["a"].kind, ExprKind::Integer(1));
+      }
+
+      #[test]
+      fn map_with_multiple_pairs() {
+        let result = run("(map \"a\" 1 \"b\" 2 \"c\" 3)").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m.len(), 3);
+        assert_eq!(m["a"].kind, ExprKind::Integer(1));
+        assert_eq!(m["b"].kind, ExprKind::Integer(2));
+        assert_eq!(m["c"].kind, ExprKind::Integer(3));
+      }
+
+      #[test]
+      fn map_evaluates_values() {
+        let result = run("(map \"sum\" (+ 1 2) \"product\" (* 3 4))").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m["sum"].kind, ExprKind::Integer(3));
+        assert_eq!(m["product"].kind, ExprKind::Integer(12));
+      }
+
+      #[test]
+      fn map_with_mixed_value_types() {
+        let result = run("(map \"n\" 42 \"s\" \"hello\" \"b\" true)").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m["n"].kind, ExprKind::Integer(42));
+        assert_eq!(m["s"].kind, ExprKind::String("hello".to_string()));
+        assert_eq!(m["b"].kind, ExprKind::Boolean(true));
+      }
+
+      #[test]
+      fn map_duplicate_key_uses_last_value() {
+        let result = run("(map \"a\" 1 \"a\" 2)").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m.len(), 1);
+        assert_eq!(m["a"].kind, ExprKind::Integer(2));
+      }
+
+      #[test]
+      fn map_odd_number_of_args_is_an_error() {
+        let result = run("(map \"a\" 1 \"b\")");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn map_integer_key_is_an_error() {
+        let result = run("(map 1 \"value\")");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn map_boolean_key_is_an_error() {
+        let result = run("(map true \"value\")");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn map_typeof_returns_map() {
+        let result = run("(typeof (map \"k\" 1))").unwrap();
+        assert_eq!(result.kind, ExprKind::String("map".to_string()));
+      }
+
+      #[test]
+      fn map_with_variable_values() {
+        let result = run("(def x 99) (map \"v\" x)").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m["v"].kind, ExprKind::Integer(99));
+      }
+    }
+
+    mod insert {
+      use super::*;
+
+      #[test]
+      fn insert_into_empty_map() {
+        let result = run("(insert (map) \"a\" 1)").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m.len(), 1);
+        assert_eq!(m["a"].kind, ExprKind::Integer(1));
+      }
+
+      #[test]
+      fn insert_new_key() {
+        let result = run("(insert (map \"a\" 1) \"b\" 2)").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m.len(), 2);
+        assert_eq!(m["a"].kind, ExprKind::Integer(1));
+        assert_eq!(m["b"].kind, ExprKind::Integer(2));
+      }
+
+      #[test]
+      fn insert_overwrites_existing_key() {
+        let result = run("(insert (map \"a\" 1) \"a\" 99)").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m.len(), 1);
+        assert_eq!(m["a"].kind, ExprKind::Integer(99));
+      }
+
+      #[test]
+      fn insert_is_immutable() {
+        let result = run("(def m (map \"a\" 1)) (insert m \"b\" 2) m").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m.len(), 1);
+        assert!(!m.contains_key("b"));
+      }
+
+      #[test]
+      fn insert_integer_key_is_an_error() {
+        let result = run("(insert (map) 42 \"val\")");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn insert_requires_three_arguments() {
+        let result = run("(insert (map) \"a\")");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn insert_requires_map_first_argument() {
+        let result = run("(insert [] \"a\" 1)");
+        assert!(result.is_err());
+      }
+    }
+
+    mod get {
+      use super::*;
+
+      #[test]
+      fn get_existing_key() {
+        let result = run("(get (map \"a\" 42) \"a\")").unwrap();
+        assert_eq!(result.kind, ExprKind::Integer(42));
+      }
+
+      #[test]
+      fn get_missing_key_returns_nil() {
+        let result = run("(get (map \"a\" 1) \"b\")").unwrap();
+        assert_eq!(result.kind, ExprKind::Nil);
+      }
+
+      #[test]
+      fn get_from_empty_map_returns_nil() {
+        let result = run("(get (map) \"a\")").unwrap();
+        assert_eq!(result.kind, ExprKind::Nil);
+      }
+
+      #[test]
+      fn get_returns_correct_type() {
+        let result = run("(get (map \"s\" \"hello\") \"s\")").unwrap();
+        assert_eq!(result.kind, ExprKind::String("hello".to_string()));
+      }
+
+      #[test]
+      fn get_integer_key_is_an_error() {
+        let result = run("(get (map \"a\" 1) 0)");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn get_requires_two_arguments() {
+        let result = run("(get (map \"a\" 1))");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn get_requires_map_first_argument() {
+        let result = run("(get [] \"a\")");
+        assert!(result.is_err());
+      }
+    }
+
+    mod has {
+      use super::*;
+
+      #[test]
+      fn has_existing_key() {
+        let result = run("(has (map \"a\" 1) \"a\")").unwrap();
+        assert_eq!(result.kind, ExprKind::Boolean(true));
+      }
+
+      #[test]
+      fn has_missing_key() {
+        let result = run("(has (map \"a\" 1) \"b\")").unwrap();
+        assert_eq!(result.kind, ExprKind::Boolean(false));
+      }
+
+      #[test]
+      fn has_on_empty_map() {
+        let result = run("(has (map) \"a\")").unwrap();
+        assert_eq!(result.kind, ExprKind::Boolean(false));
+      }
+
+      #[test]
+      fn has_integer_key_is_an_error() {
+        let result = run("(has (map \"a\" 1) 0)");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn has_requires_two_arguments() {
+        let result = run("(has (map \"a\" 1))");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn has_requires_map_first_argument() {
+        let result = run("(has [] \"a\")");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn has_can_be_used_in_if() {
+        let result = run("(if (has (map \"x\" 1) \"x\") \"found\")").unwrap();
+        assert_eq!(result.kind, ExprKind::String("found".to_string()));
+      }
+    }
+
+    mod remove {
+      use super::*;
+
+      #[test]
+      fn remove_existing_key() {
+        let result = run("(remove (map \"a\" 1 \"b\" 2) \"a\")").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m.len(), 1);
+        assert!(!m.contains_key("a"));
+        assert_eq!(m["b"].kind, ExprKind::Integer(2));
+      }
+
+      #[test]
+      fn remove_missing_key_is_a_noop() {
+        let result = run("(remove (map \"a\" 1) \"b\")").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m.len(), 1);
+        assert_eq!(m["a"].kind, ExprKind::Integer(1));
+      }
+
+      #[test]
+      fn remove_from_empty_map() {
+        let result = run("(remove (map) \"a\")").unwrap();
+        assert!(matches!(result.kind, ExprKind::Map(ref m) if m.is_empty()));
+      }
+
+      #[test]
+      fn remove_is_immutable() {
+        let result =
+          run("(def m (map \"a\" 1 \"b\" 2)) (remove m \"a\") m").unwrap();
+        let ExprKind::Map(m) = result.kind else {
+          panic!("Expected map");
+        };
+        assert_eq!(m.len(), 2);
+        assert!(m.contains_key("a"));
+      }
+
+      #[test]
+      fn remove_integer_key_is_an_error() {
+        let result = run("(remove (map \"a\" 1) 0)");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn remove_requires_two_arguments() {
+        let result = run("(remove (map \"a\" 1))");
+        assert!(result.is_err());
+      }
+    }
+
+    mod keys {
+      use super::*;
+
+      #[test]
+      fn keys_of_empty_map() {
+        let result = run("(keys (map))").unwrap();
+        assert_eq!(result.kind, ExprKind::List(Rc::new(vec![])));
+      }
+
+      #[test]
+      fn keys_of_single_entry_map() {
+        let result = run("(keys (map \"a\" 1))").unwrap();
+        let ExprKind::List(items) = result.kind else {
+          panic!("Expected list");
+        };
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].kind, ExprKind::String("a".to_string()));
+      }
+
+      #[test]
+      fn keys_are_sorted() {
+        let result = run("(keys (map \"c\" 3 \"a\" 1 \"b\" 2))").unwrap();
+        let ExprKind::List(items) = result.kind else {
+          panic!("Expected list");
+        };
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0].kind, ExprKind::String("a".to_string()));
+        assert_eq!(items[1].kind, ExprKind::String("b".to_string()));
+        assert_eq!(items[2].kind, ExprKind::String("c".to_string()));
+      }
+
+      #[test]
+      fn keys_returns_strings() {
+        let result = run("(keys (map \"x\" 1))").unwrap();
+        let ExprKind::List(items) = result.kind else {
+          panic!("Expected list");
+        };
+        assert!(matches!(items[0].kind, ExprKind::String(_)));
+      }
+
+      #[test]
+      fn keys_requires_a_map() {
+        let result = run("(keys [])");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn keys_requires_one_argument() {
+        let result = run("(keys)");
+        assert!(result.is_err());
+      }
+    }
+
+    mod values {
+      use super::*;
+
+      #[test]
+      fn values_of_empty_map() {
+        let result = run("(values (map))").unwrap();
+        assert_eq!(result.kind, ExprKind::List(Rc::new(vec![])));
+      }
+
+      #[test]
+      fn values_of_single_entry_map() {
+        let result = run("(values (map \"a\" 42))").unwrap();
+        let ExprKind::List(items) = result.kind else {
+          panic!("Expected list");
+        };
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].kind, ExprKind::Integer(42));
+      }
+
+      #[test]
+      fn values_are_sorted_by_key() {
+        let result = run("(values (map \"c\" 3 \"a\" 1 \"b\" 2))").unwrap();
+        let ExprKind::List(items) = result.kind else {
+          panic!("Expected list");
+        };
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0].kind, ExprKind::Integer(1));
+        assert_eq!(items[1].kind, ExprKind::Integer(2));
+        assert_eq!(items[2].kind, ExprKind::Integer(3));
+      }
+
+      #[test]
+      fn values_requires_a_map() {
+        let result = run("(values [])");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn values_requires_one_argument() {
+        let result = run("(values)");
+        assert!(result.is_err());
+      }
+    }
+
+    mod entries {
+      use super::*;
+
+      #[test]
+      fn entries_of_empty_map() {
+        let result = run("(entries (map))").unwrap();
+        assert_eq!(result.kind, ExprKind::List(Rc::new(vec![])));
+      }
+
+      #[test]
+      fn entries_of_single_entry_map() {
+        let result = run("(entries (map \"a\" 42))").unwrap();
+        let ExprKind::List(pairs) = result.kind else {
+          panic!("Expected list of pairs");
+        };
+        assert_eq!(pairs.len(), 1);
+        let ExprKind::List(pair) = &pairs[0].kind else {
+          panic!("Expected pair as list");
+        };
+        assert_eq!(pair[0].kind, ExprKind::String("a".to_string()));
+        assert_eq!(pair[1].kind, ExprKind::Integer(42));
+      }
+
+      #[test]
+      fn entries_are_sorted_by_key() {
+        let result = run("(entries (map \"c\" 3 \"a\" 1 \"b\" 2))").unwrap();
+        let ExprKind::List(pairs) = result.kind else {
+          panic!("Expected list of pairs");
+        };
+        assert_eq!(pairs.len(), 3);
+        let ExprKind::List(p0) = &pairs[0].kind else {
+          panic!("Expected pair");
+        };
+        let ExprKind::List(p1) = &pairs[1].kind else {
+          panic!("Expected pair");
+        };
+        let ExprKind::List(p2) = &pairs[2].kind else {
+          panic!("Expected pair");
+        };
+        assert_eq!(p0[0].kind, ExprKind::String("a".to_string()));
+        assert_eq!(p0[1].kind, ExprKind::Integer(1));
+        assert_eq!(p1[0].kind, ExprKind::String("b".to_string()));
+        assert_eq!(p1[1].kind, ExprKind::Integer(2));
+        assert_eq!(p2[0].kind, ExprKind::String("c".to_string()));
+        assert_eq!(p2[1].kind, ExprKind::Integer(3));
+      }
+
+      #[test]
+      fn entries_pair_is_two_element_list() {
+        let result = run("(entries (map \"k\" \"v\"))").unwrap();
+        let ExprKind::List(pairs) = result.kind else {
+          panic!("Expected list");
+        };
+        let ExprKind::List(pair) = &pairs[0].kind else {
+          panic!("Expected pair as list");
+        };
+        assert_eq!(pair.len(), 2);
+      }
+
+      #[test]
+      fn entries_requires_a_map() {
+        let result = run("(entries [])");
+        assert!(result.is_err());
+      }
+
+      #[test]
+      fn entries_requires_one_argument() {
+        let result = run("(entries)");
+        assert!(result.is_err());
+      }
+    }
+  }
+
   mod call {
     use super::*;
 

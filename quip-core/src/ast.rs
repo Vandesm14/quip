@@ -405,7 +405,16 @@ impl core::fmt::Display for ExprKind {
 
         write!(f, ")")
       }
-      ExprKind::Map(_) => todo!(),
+      ExprKind::Map(map) => {
+        write!(f, "{{")?;
+        let mut entries: Vec<_> = map.iter().collect();
+        entries.sort_by(|(a, _), (b, _)| a.as_ref().cmp(b.as_ref()));
+        core::iter::once("")
+          .chain(core::iter::repeat(", "))
+          .zip(entries.iter())
+          .try_for_each(|(sep, (k, v))| write!(f, "{sep}{k}: {v}"))?;
+        write!(f, "}}")
+      }
       ExprKind::Function { params, body, .. } => {
         write!(f, "Fn([")?;
 

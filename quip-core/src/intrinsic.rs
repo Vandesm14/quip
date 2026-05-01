@@ -21,6 +21,8 @@ pub enum ExprType {
   Symbol,
   /// (...)
   List,
+  /// {key val ...}
+  Map,
   /// any
   Any,
 }
@@ -35,6 +37,7 @@ impl std::fmt::Display for ExprType {
       ExprType::String => write!(f, "string"),
       ExprType::Symbol => write!(f, "symbol"),
       ExprType::List => write!(f, "list"),
+      ExprType::Map => write!(f, "map"),
       ExprType::Any => write!(f, "any"),
     }
   }
@@ -161,6 +164,7 @@ impl Intrinsic {
       ExprType::String => matches!(expr.kind, ExprKind::String(_)),
       ExprType::Symbol => matches!(expr.kind, ExprKind::Symbol(_)),
       ExprType::List => matches!(expr.kind, ExprKind::List(_)),
+      ExprType::Map => matches!(expr.kind, ExprKind::Map(_)),
       ExprType::Any => true,
     };
 
@@ -916,7 +920,7 @@ pub fn meta_ops(map: &mut HashMap<&'static str, Intrinsic>) {
     params: &[Param::EvalTo(ExprType::String)],
     handler: |runtime, args| {
       let ExprKind::String(ref str) = args.first().unwrap().kind else {
-        unreachable!("type-checker validates types");
+        unreachable!("handled by type-checker");
       };
       let tokens = lex(str, Default::default());
       let exprs = parse(str, tokens).map_err(|err| {
@@ -1021,6 +1025,186 @@ pub fn error_ops(map: &mut HashMap<&'static str, Intrinsic>) {
   map.insert("throw", THROW);
 }
 
+pub fn map_ops(map: &mut HashMap<&'static str, Intrinsic>) {
+  const MAP: Intrinsic = Intrinsic {
+    params: &[Param::Many(ExprType::Any)],
+    handler: |runtime, args| {
+      if args.len() % 2 != 0 {
+        return Err(
+          runtime.error(ErrorReason::Message(
+            "'map' requires an even number of arguments (key-value pairs)"
+              .to_string(),
+          )),
+        );
+      }
+      let mut result = HashMap::new();
+      for pair in args.chunks(2) {
+        let key = runtime.eval_expr(&pair[0])?;
+        let val = runtime.eval_expr(&pair[1])?;
+        let ExprKind::String(key_str) = &key.kind else {
+          return Err(runtime.error(ErrorReason::Message(
+            "'map' keys must be strings".to_string(),
+          )));
+        };
+        result.insert(Rc::from(key_str.as_str()), val);
+      }
+      Ok(Expr {
+        kind: ExprKind::Map(result),
+        span: None,
+      })
+    },
+  };
+  const INSERT: Intrinsic = Intrinsic {
+    params: &[
+      Param::EvalTo(ExprType::Map),
+      Param::EvalTo(ExprType::String),
+      Param::EvalTo(ExprType::Any),
+    ],
+    handler: |_, args| {
+      let ExprKind::Map(map_data) = args[0].kind.clone() else {
+        unreachable!("handled by type-checker");
+      };
+      let ExprKind::String(key) = &args[1].kind else {
+        unreachable!("handled by type-checker");
+      };
+      let val = args[2].clone();
+      let mut new_map = map_data;
+      new_map.insert(Rc::from(key.as_str()), val);
+      Ok(Expr {
+        kind: ExprKind::Map(new_map),
+        span: None,
+      })
+    },
+  };
+  const GET: Intrinsic = Intrinsic {
+    params: &[
+      Param::EvalTo(ExprType::Map),
+      Param::EvalTo(ExprType::String),
+    ],
+    handler: |_, args| {
+      let ExprKind::Map(map_data) = args[0].kind.clone() else {
+        unreachable!("handled by type-checker");
+      };
+      let ExprKind::String(key) = &args[1].kind else {
+        unreachable!("handled by type-checker");
+      };
+      Ok(map_data.get(key.as_str()).cloned().unwrap_or(Expr {
+        kind: ExprKind::Nil,
+        span: None,
+      }))
+    },
+  };
+  const HAS: Intrinsic = Intrinsic {
+    params: &[
+      Param::EvalTo(ExprType::Map),
+      Param::EvalTo(ExprType::String),
+    ],
+    handler: |_, args| {
+      let ExprKind::Map(map_data) = args[0].kind.clone() else {
+        unreachable!("handled by type-checker");
+      };
+      let ExprKind::String(key) = &args[1].kind else {
+        unreachable!("handled by type-checker");
+      };
+      Ok(Expr {
+        kind: ExprKind::Boolean(map_data.contains_key(key.as_str())),
+        span: None,
+      })
+    },
+  };
+  const REMOVE: Intrinsic = Intrinsic {
+    params: &[
+      Param::EvalTo(ExprType::Map),
+      Param::EvalTo(ExprType::String),
+    ],
+    handler: |_, args| {
+      let ExprKind::Map(map_data) = args[0].kind.clone() else {
+        unreachable!("handled by type-checker");
+      };
+      let ExprKind::String(key) = &args[1].kind else {
+        unreachable!("handled by type-checker");
+      };
+      let mut new_map = map_data;
+      new_map.remove(key.as_str());
+      Ok(Expr {
+        kind: ExprKind::Map(new_map),
+        span: None,
+      })
+    },
+  };
+  const KEYS: Intrinsic = Intrinsic {
+    params: &[Param::EvalTo(ExprType::Map)],
+    handler: |_, args| {
+      let ExprKind::Map(map_data) = args[0].kind.clone() else {
+        unreachable!("handled by type-checker");
+      };
+      let mut keys: Vec<Expr> = map_data
+        .keys()
+        .map(|k| Expr {
+          kind: ExprKind::String(k.to_string()),
+          span: None,
+        })
+        .collect();
+      keys.sort_by_key(|a| a.to_string());
+      Ok(Expr {
+        kind: ExprKind::List(Rc::new(keys)),
+        span: None,
+      })
+    },
+  };
+  const VALUES: Intrinsic = Intrinsic {
+    params: &[Param::EvalTo(ExprType::Map)],
+    handler: |_, args| {
+      let ExprKind::Map(map_data) = args[0].kind.clone() else {
+        unreachable!("handled by type-checker");
+      };
+      let mut entries: Vec<_> = map_data.into_iter().collect();
+      entries.sort_by(|(a, _), (b, _)| a.as_ref().cmp(b.as_ref()));
+      let values: Vec<Expr> = entries.into_iter().map(|(_, v)| v).collect();
+      Ok(Expr {
+        kind: ExprKind::List(Rc::new(values)),
+        span: None,
+      })
+    },
+  };
+  const ENTRIES: Intrinsic = Intrinsic {
+    params: &[Param::EvalTo(ExprType::Map)],
+    handler: |_, args| {
+      let ExprKind::Map(map_data) = args[0].kind.clone() else {
+        unreachable!("handled by type-checker");
+      };
+      let mut entries: Vec<_> = map_data.into_iter().collect();
+      entries.sort_by(|(a, _), (b, _)| a.as_ref().cmp(b.as_ref()));
+      let pairs: Vec<Expr> = entries
+        .into_iter()
+        .map(|(k, v)| Expr {
+          kind: ExprKind::List(Rc::new(vec![
+            Expr {
+              kind: ExprKind::String(k.to_string()),
+              span: None,
+            },
+            v,
+          ])),
+          span: None,
+        })
+        .collect();
+      Ok(Expr {
+        kind: ExprKind::List(Rc::new(pairs)),
+        span: None,
+      })
+    },
+  };
+
+  map.insert("map", MAP);
+  map.insert("insert", INSERT);
+  map.insert("get", GET);
+  map.insert("has", HAS);
+  map.insert("remove", REMOVE);
+  map.insert("keys", KEYS);
+  map.insert("values", VALUES);
+  map.insert("entries", ENTRIES);
+}
+
 pub fn all() -> HashMap<&'static str, Intrinsic> {
   let mut map = HashMap::new();
   arithmetic(&mut map);
@@ -1031,5 +1215,6 @@ pub fn all() -> HashMap<&'static str, Intrinsic> {
   io_ops(&mut map);
   meta_ops(&mut map);
   error_ops(&mut map);
+  map_ops(&mut map);
   map
 }

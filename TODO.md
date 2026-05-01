@@ -1,11 +1,11 @@
-- [ ] Record
-  - [ ] `insert`
-  - [ ] `get`
-  - [ ] `has`
-  - [ ] `remove`
-  - [ ] `keys`
-  - [ ] `values`
-  - [ ] `entries`
+- [x] Record
+  - [x] `insert`
+  - [x] `get`
+  - [x] `has`
+  - [x] `remove`
+  - [x] `keys`
+  - [x] `values`
+  - [x] `entries`
 - [ ] Type
   - [ ] `cast`
   - [x] `typeof`
@@ -13,7 +13,7 @@
   - [x] `force`
   - [x] `fn`
   - [x] `list`
-  - [ ] `map`
+  - [x] `map`
 - [ ] Control Flow
   - [x] `if`
   - [ ] `exit`

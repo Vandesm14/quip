@@ -1,0 +1,83 @@
+;; (defn when [cond run]
+;;   (and cond (call (fn [] (call run) true))))
+
+(defn when [cond run]
+  (if cond (call run)))
+
+
+(defn assert [msg expr]
+  (if (not expr)
+    (throw (error msg))))
+(defn assert-eq [msg lhs rhs]
+  (assert msg (= lhs rhs)))
+(assert "asserts work" true)
+
+
+(call (fn []
+  (def my-var 0)
+
+  (def base-val 0)
+  (def good-val 1)
+  (def bad-val 2)
+
+  (defn cb [] (set my-var good-val))
+  (defn bad-cb [] (set my-var bad-val))
+
+  (defn helper [n] (fn [] (set my-var n)))
+
+
+  (print "--- defn ---")
+  (set my-var base-val)
+  (if true cb)
+  (assert-eq "if true" my-var good-val)
+
+  (set my-var base-val)
+  (when true cb)
+  (assert-eq "when true" my-var good-val)
+
+  (set my-var base-val)
+  (if false bad-cb)
+  (assert-eq "if false" my-var base-val)
+
+  (set my-var base-val)
+  (when false bad-cb)
+  (assert-eq "when false" my-var base-val)
+
+
+  (print "--- helper ---")
+  (set my-var base-val)
+  (if true (helper good-val))
+  (assert-eq "if true" my-var good-val)
+
+  (set my-var base-val)
+  (when true (helper good-val))
+  (assert-eq "when true" my-var good-val)
+
+  (set my-var base-val)
+  (if false (helper bad-val))
+  (assert-eq "if false" my-var base-val)
+
+  (set my-var base-val)
+  (when false (helper bad-val))
+  (assert-eq "when false" my-var base-val)
+
+
+  (print "--- anon ---")
+  (set my-var base-val)
+  (if true (fn [] (set my-var good-val)))
+  (assert-eq "if true" my-var good-val)
+
+  (set my-var base-val)
+  (when true (fn [] (set my-var good-val)))
+  (assert-eq "when true" my-var good-val)
+
+  (set my-var base-val)
+  (if false (fn [] (set my-var bad-val)))
+  (assert-eq "if false" my-var base-val)
+
+  (set my-var base-val)
+  (when false (fn [] (set my-var bad-val)))
+  (assert-eq "when false" my-var base-val)
+
+  (print "all tests pass.")
+))

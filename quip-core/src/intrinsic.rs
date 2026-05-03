@@ -684,12 +684,70 @@ pub fn list_ops(map: &mut HashMap<&'static str, Intrinsic>) {
       })
     },
   };
+  const CONCAT: Intrinsic = Intrinsic {
+    params: &[Param::ManyEvalTo(ExprType::Any)],
+    handler: |runtime, args| {
+      if args.is_empty() {
+        return Err(runtime.error(ErrorReason::Message(
+          "'concat' requires at least one argument".to_string(),
+        )));
+      }
+      match &args[0].kind {
+        ExprKind::String(_) => {
+          let mut out = String::new();
+          for arg in args.iter() {
+            let ExprKind::String(s) = &arg.kind else {
+              return Err(runtime.error(ErrorReason::CallError(CallError {
+                symbol: "concat".to_owned(),
+                kind: CallErrorKind::TypeMismatch {
+                  expected: vec!["string".to_owned()],
+                  received: vec![arg.kind.type_name().to_owned()],
+                },
+              })));
+            };
+            out.push_str(s);
+          }
+          Ok(Expr {
+            kind: ExprKind::String(out),
+            span: None,
+          })
+        }
+        ExprKind::List(_) => {
+          let mut out = Vec::new();
+          for arg in args.iter() {
+            let ExprKind::List(items) = &arg.kind else {
+              return Err(runtime.error(ErrorReason::CallError(CallError {
+                symbol: "concat".to_owned(),
+                kind: CallErrorKind::TypeMismatch {
+                  expected: vec!["list".to_owned()],
+                  received: vec![arg.kind.type_name().to_owned()],
+                },
+              })));
+            };
+            out.extend(items.iter().cloned());
+          }
+          Ok(Expr {
+            kind: ExprKind::List(Rc::new(out)),
+            span: None,
+          })
+        }
+        _ => Err(runtime.error(ErrorReason::CallError(CallError {
+          symbol: "concat".to_owned(),
+          kind: CallErrorKind::TypeMismatch {
+            expected: vec!["string".to_owned(), "list".to_owned()],
+            received: vec![args[0].kind.type_name().to_owned()],
+          },
+        }))),
+      }
+    },
+  };
 
   map.insert("list", LIST);
   map.insert("nth", NTH);
   map.insert("set-nth", SET_NTH);
   map.insert("push", PUSH);
   map.insert("pop", POP);
+  map.insert("concat", CONCAT);
 }
 
 pub fn type_ops(map: &mut HashMap<&'static str, Intrinsic>) {

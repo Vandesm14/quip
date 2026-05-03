@@ -1013,6 +1013,82 @@ mod tests {
           assert!(run("(len nil)").is_err());
         }
       }
+
+      mod concat {
+        use super::*;
+
+        #[test]
+        fn concat_strings() {
+          let result = run("(concat \"a\" \"b\" \"c\")").unwrap();
+          assert_eq!(result.kind, ExprKind::String("abc".to_string()));
+        }
+
+        #[test]
+        fn concat_single_string() {
+          let result = run("(concat \"hello\")").unwrap();
+          assert_eq!(result.kind, ExprKind::String("hello".to_string()));
+        }
+
+        #[test]
+        fn concat_strings_evaluates_arguments() {
+          let result = run("(concat \"a\" (to-string (+ 1 2)) \"b\")").unwrap();
+          assert_eq!(result.kind, ExprKind::String("a3b".to_string()));
+        }
+
+        #[test]
+        fn concat_lists() {
+          let result = run("(concat [1 2] [3] [4 5])").unwrap();
+          let ExprKind::List(items) = result.kind else {
+            panic!("Expected list");
+          };
+          assert_eq!(items.len(), 5);
+          assert_eq!(items[0].kind, ExprKind::Integer(1));
+          assert_eq!(items[1].kind, ExprKind::Integer(2));
+          assert_eq!(items[2].kind, ExprKind::Integer(3));
+          assert_eq!(items[3].kind, ExprKind::Integer(4));
+          assert_eq!(items[4].kind, ExprKind::Integer(5));
+        }
+
+        #[test]
+        fn concat_single_list() {
+          let result = run("(concat [1 2])").unwrap();
+          let ExprKind::List(items) = result.kind else {
+            panic!("Expected list");
+          };
+          assert_eq!(items.len(), 2);
+          assert_eq!(items[0].kind, ExprKind::Integer(1));
+          assert_eq!(items[1].kind, ExprKind::Integer(2));
+        }
+
+        #[test]
+        fn concat_empty_lists() {
+          let result = run("(concat [] [])").unwrap();
+          let ExprKind::List(items) = result.kind else {
+            panic!("Expected list");
+          };
+          assert!(items.is_empty());
+        }
+
+        #[test]
+        fn concat_mixed_string_and_list_errors() {
+          assert!(run("(concat \"a\" [1])").is_err());
+        }
+
+        #[test]
+        fn concat_mixed_list_and_string_errors() {
+          assert!(run("(concat [1] \"a\")").is_err());
+        }
+
+        #[test]
+        fn concat_requires_at_least_one_argument() {
+          assert!(run("(concat)").is_err());
+        }
+
+        #[test]
+        fn concat_integer_errors() {
+          assert!(run("(concat 1)").is_err());
+        }
+      }
     }
 
     mod r#typeof {

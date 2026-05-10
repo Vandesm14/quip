@@ -2,7 +2,7 @@ use std::io;
 use std::net::TcpListener;
 
 use quip_core::{
-  ast::{Expr, ExprKind, lex, parse},
+  ast::{Expr, ExprKind, LexOptions, lex, parse},
   run::Runtime,
 };
 use quip_notebook::{Request, Response, read_framed_json, write_framed_json};
@@ -35,7 +35,7 @@ fn main() {
         }
         Request::Eval { id, source } => {
           let result: Result<String, String> = (|| {
-            let tokens = lex(&source);
+            let tokens = lex(&source, LexOptions::default());
             let exprs = parse(&source, tokens)?;
             let mut last = Expr {
               kind: ExprKind::Nil,
